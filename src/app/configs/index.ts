@@ -30,6 +30,7 @@ const envSchema = z.object({
    NODE_APP_EMAIL: z.string(),
    NODE_EMAIL_HOST: z.string(),
    NODE_EMAIL_PORT: z.string().transform((val) => Number(val)),
+   NODE_EMAIL_REPLY_TO: z.string(),
 
    // JWT
    ACCESS_TOKEN_SECRET: z.string().min(10),
@@ -51,6 +52,11 @@ const envSchema = z.object({
 
    OTP_EXPIRES_IN: z.string().transform(Number).default(5),
    OTP_DIGITS: z.string().transform(Number).default(6),
+   OTP_RESEND_WINDOW: z.string().transform(Number).default(60),
+
+   CLOUDINARY_CLOUD_NAME: z.string(),
+   CLOUDINARY_API_SECRET: z.string(),
+   CLOUDINARY_API_KEY: z.string(),
 });
 
 // 3. Validate process.env
@@ -85,6 +91,7 @@ export const configs = {
       email: env.NODE_APP_EMAIL,
       port: env.NODE_EMAIL_PORT,
       host: env.NODE_EMAIL_HOST,
+      replyTo: env.NODE_EMAIL_REPLY_TO,
    },
 
    jwt: {
@@ -117,6 +124,13 @@ export const configs = {
    otpSettings: {
       expiresIn: env.OTP_EXPIRES_IN,
       digits: env.OTP_DIGITS,
+      resendWindow: env.OTP_RESEND_WINDOW,
+   },
+
+   cloudinary: {
+      cloudinaryCloudName: env.CLOUDINARY_CLOUD_NAME,
+      cloudinaryApiSecret: env.CLOUDINARY_API_SECRET,
+      cloudinaryApiKey: env.CLOUDINARY_API_KEY,
    },
 } as const;
 

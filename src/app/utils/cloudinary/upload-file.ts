@@ -4,14 +4,15 @@ import {
    type UploadApiResponse,
 } from "cloudinary";
 import streamifier from "streamifier";
-import { AppError } from "../errors";
+
 import httpStatus from "http-status";
-import { configs } from "../configs";
+import { configs } from "../../configs";
+import { AppError } from "../../errors";
 
 cloudinary.config({
-   cloud_name: configs?.cloudinaryCloudName,
-   api_key: configs?.cloudinaryApiKey,
-   api_secret: configs?.cloudinaryApiSecret,
+   cloud_name: configs?.cloudinary.cloudinaryCloudName,
+   api_key: configs?.cloudinary?.cloudinaryApiKey,
+   api_secret: configs?.cloudinary?.cloudinaryApiSecret,
 });
 
 const uploadFileIntoCloudinary = (
@@ -22,8 +23,8 @@ const uploadFileIntoCloudinary = (
       const resourceType = file?.mimetype?.startsWith("image/")
          ? "image"
          : file?.mimetype?.startsWith("video/")
-            ? "video"
-            : "auto";
+           ? "video"
+           : "auto";
 
       const steam = cloudinary.uploader.upload_stream(
          {

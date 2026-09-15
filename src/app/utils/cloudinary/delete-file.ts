@@ -1,10 +1,10 @@
 import { v2 as cloudinary, type UploadApiResponse } from "cloudinary";
-import { configs } from "../configs";
+import { configs } from "../../configs";
 
 cloudinary.config({
-   cloud_name: configs?.cloudinaryCloudName,
-   api_key: configs?.cloudinaryApiKey,
-   api_secret: configs?.cloudinaryApiSecret,
+   cloud_name: configs?.cloudinary.cloudinaryCloudName,
+   api_key: configs?.cloudinary?.cloudinaryApiKey,
+   api_secret: configs?.cloudinary?.cloudinaryApiSecret,
 });
 
 export const deleteFileByUrl = async (url: string) => {

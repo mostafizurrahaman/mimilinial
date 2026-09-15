@@ -9,13 +9,25 @@ import { multerFactory } from "../../utils";
 const router: Router = express.Router();
 
 router.post(
-   "/sign-up",
+   "/signup",
    multerFactory({
       category: "image",
       maxSizeInMB: 10,
    }).single("profileImage"),
    validateRequest(userValidations.createUserSchema),
    userControllers.createUser,
+);
+
+router.post(
+   "/resend-signup-otp",
+   validateRequest(userValidations.resendSignupOTPSchema),
+   userControllers.resendSignupOTP,
+);
+
+router.post(
+   "/verify-signup-otp",
+   validateRequest(userValidations.verifySignupOTPSchema),
+   userControllers.verifySignupOTP,
 );
 
 router.patch(

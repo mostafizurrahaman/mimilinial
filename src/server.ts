@@ -4,13 +4,16 @@ import app from "./app";
 import dns from "node:dns/promises";
 import { configs } from "./app/configs";
 import { logger } from "./app/utils";
+import { connectDB } from "./app/utils/connect-db";
 
-dns.setServers(["1.1.1.1"]);
+// dns.setServers(["1.1.1.1"]);
 
 let server: Server;
 //  bootstrap function :
 const bootstrap = async () => {
    try {
+      await connectDB(configs.databaseUrl);
+
       // server listen :
       server = app.listen(configs.port, () => {
          logger.info(`🧑‍🚀🚀 Server is running on ${configs.port}`);

@@ -6,6 +6,7 @@ import helmet from "helmet";
 import { getRateLimiter } from "./app/libs";
 import globalErrorHandler from "./app/middlewares/global-error-handler";
 import { notFound } from "./app/middlewares";
+import { allRoutes } from "./app/routes";
 
 /**
  * ====================
@@ -61,6 +62,8 @@ app.get("/api/v1", (req, res) => {
       message: "Version 1 port also healthy now.",
    });
 });
+
+app.use("/api/v1", allRoutes);
 
 app.use(globalErrorHandler);
 

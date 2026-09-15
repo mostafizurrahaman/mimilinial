@@ -9,6 +9,7 @@ import {
 } from "../../utils";
 import { userSortableFields } from "./user.constants";
 import { bdPhoneRegex, sortOrderValues } from "../../constants";
+import { configs } from "../../configs";
 
 const createUserSchema = z.object({
    body: z.object({
@@ -24,7 +25,26 @@ const createUserSchema = z.object({
          .regex(/[A-Z]/, "Password must contain an uppercase letter")
          .regex(/\d/, "Password must contain a number")
          .regex(/[@$!%*?&]/, "Password must contain a special character"),
-      
+   }),
+});
+
+const resendSignupOTPSchema = z.object({
+   body: z.object({
+      email: requiredEmail("Email"),
+   }),
+});
+
+const verifySignupOTPSchema = z.object({
+   body: z.object({
+      email: requiredEmail("Email"),
+      otp: z
+         .string({
+            error: "OTP is required.",
+         })
+         .length(configs.otpSettings.digits || 6, {
+            message: "OTP must be exactly 6 digits",
+         })
+         .regex(/^\d+$/, { message: "OTP must contain only numbers" }),
    }),
 });
 
@@ -61,6 +81,8 @@ const deleteUserByIdSchema = z.object({
 
 export const userValidations = {
    createUserSchema,
+   resendSignupOTPSchema,
+   verifySignupOTPSchema,
    updateUserSchema,
    getAllUserSchema,
    getUserByIdSchema,
@@ -69,6 +91,13 @@ export const userValidations = {
 
 export type TCreateUserPayloadType = z.infer<
    typeof createUserSchema.shape.body
+>;
+export type TResendSignupOTPPayloadType = z.infer<
+   typeof resendSignupOTPSchema.shape.body
+>;
+
+export type TVerifySignupOTPPayloadType = z.infer<
+   typeof verifySignupOTPSchema.shape.body
 >;
 export type TUpdateUserPayloadType = z.infer<
    typeof updateUserSchema.shape.body

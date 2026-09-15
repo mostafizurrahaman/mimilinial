@@ -3,8 +3,9 @@ import {
    type UploadApiResponse,
 } from "cloudinary";
 import streamifier from "streamifier";
-import { AppError } from "../errors";
+
 import httpStatus from "http-status";
+import { AppError } from "../../errors";
 
 export const uploadBufferIntoCloudinary = (
    buffer: Buffer,

@@ -29,7 +29,6 @@ const userSchema = new Schema<IUserDoc>(
       },
       password: {
          type: String,
-         required: true,
          allowNull: true,
          select: false,
       },
@@ -46,7 +45,6 @@ const userSchema = new Schema<IUserDoc>(
       },
       profileImage: {
          type: String,
-         required: true,
          allowNull: true,
       },
       isOtpVerified: {
@@ -89,27 +87,22 @@ const userSchema = new Schema<IUserDoc>(
       },
       blockedAt: {
          type: Date,
-         required: true,
          allowNull: true,
       },
       deletedAt: {
          type: Date,
-         required: true,
          allowNull: true,
       },
       passwordChangedAt: {
          type: Date,
-         required: true,
          allowNull: true,
       },
       lastLoginAt: {
          type: Date,
-         required: true,
          allowNull: true,
       },
       lastActivityAt: {
          type: Date,
-         required: true,
          allowNull: true,
       },
    },

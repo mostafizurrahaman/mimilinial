@@ -9,7 +9,27 @@ const createUser = catchAsync(async (req, res) => {
 
    sendResponse(res, {
       statusCode: httpStatus.CREATED,
-      message: "The user created successfully!",
+      message: result?.message,
+      data: result,
+   });
+});
+
+const resendSignupOTP = catchAsync(async (req, res) => {
+   const result = await userServices.resendSignupOTP(req.body);
+
+   sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: "Signup OTP resend successfully.",
+      data: result,
+   });
+});
+
+const verifySignupOTP = catchAsync(async (req, res) => {
+   const result = await userServices.verifySignupOTP(req.body);
+
+   sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: "Signup OTP verified successfully.",
       data: result,
    });
 });
@@ -60,6 +80,8 @@ const deleteUserById = catchAsync(async (req, res) => {
 
 export const userControllers = {
    createUser,
+   resendSignupOTP,
+   verifySignupOTP,
    updateUser,
    getAllUser,
    getUserById,
