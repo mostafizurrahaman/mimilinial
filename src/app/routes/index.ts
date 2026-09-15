@@ -4,10 +4,10 @@ import { userRoutes } from "../modules/User";
 const router: Router = express();
 
 const routes = [
-   {
-      path: "/auth",
-      route: userRoutes,
-   },
+  {
+    path: "/auth",
+    route: userRoutes,
+  },
 ];
 
 routes.forEach((route) => router.use(route.path, route.route));
