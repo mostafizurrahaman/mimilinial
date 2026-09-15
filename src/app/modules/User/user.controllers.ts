@@ -1,13 +1,35 @@
 import httpStatus from "http-status";
 import { userServices } from "./user.services";
 import { sendResponse, catchAsync } from "../../utils";
+import type { TMulterFile } from "../../interfaces/multer.types";
 
 const createUser = catchAsync(async (req, res) => {
-   const result = await userServices.createUser(req.body);
+   const profileImage = req.file as TMulterFile;
+   const result = await userServices.createUser(req.body, profileImage);
 
    sendResponse(res, {
       statusCode: httpStatus.CREATED,
-      message: "The user created successfully!",
+      message: result?.message,
+      data: result,
+   });
+});
+
+const resendSignupOTP = catchAsync(async (req, res) => {
+   const result = await userServices.resendSignupOTP(req.body);
+
+   sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: "Signup OTP resend successfully.",
+      data: result,
+   });
+});
+
+const verifySignupOTP = catchAsync(async (req, res) => {
+   const result = await userServices.verifySignupOTP(req.body);
+
+   sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: "Signup OTP verified successfully.",
       data: result,
    });
 });
@@ -58,6 +80,8 @@ const deleteUserById = catchAsync(async (req, res) => {
 
 export const userControllers = {
    createUser,
+   resendSignupOTP,
+   verifySignupOTP,
    updateUser,
    getAllUser,
    getUserById,

@@ -4,14 +4,287 @@ import type {
    TCreateUserPayloadType,
    TUpdateUserPayloadType,
    TGetAllUserQueryParamsType,
+   TResendSignupOTPPayloadType,
+   TVerifySignupOTPPayloadType,
 } from "./user.validations";
-import { AppError } from "../../errors";
+import { AppError, BadRequest, NotFoundError } from "../../errors";
 import { User } from "./user.model";
-import { userSearchableFields } from "./user.constants";
+import { UserRoles, userSearchableFields, UserStatus } from "./user.constants";
+import type { TMulterFile } from "../../interfaces/multer.types";
+import uploadFileIntoCloudinary from "../../utils/cloudinary/upload-file";
+import { File_FOLDER_NAME } from "../../constants/folder_name";
+import { comparePassword, hashPassword } from "../../utils";
+import { configs } from "../../configs";
+import mongoose from "mongoose";
+import { checkResendCoolDown, createOrReplaceOTP, Otp, OtpTypes } from "../Otp";
+import { deleteFileByUrl } from "../../utils/cloudinary/delete-file";
+import { sendEmail } from "../../utils/send-email";
 
-const createUser = async (payload: TCreateUserPayloadType) => {
-   const result = await User.create(payload);
-   return result;
+/**
+ * CREATE USER:
+ */
+const createUser = async (
+   payload: TCreateUserPayloadType,
+   profileImage: TMulterFile,
+) => {
+   const { email, name, phone, password } = payload;
+
+   // ?? Check with this email is any user exists?
+   const existingUser = await User.findOne({
+      email,
+   });
+
+   if (existingUser) {
+      if (existingUser.isOtpVerified) {
+         throw new BadRequest(
+            `This email already in use. Account status "${existingUser.status}"`,
+         );
+      } else {
+         // ?? Find the otp for this user :
+         const existingOTP = await Otp.findOne({
+            user: existingUser?._id,
+            type: OtpTypes.SIGNUP,
+         });
+
+         // ?? Cooldown:
+         if (existingOTP) {
+            checkResendCoolDown(existingOTP.lastSentAt);
+         }
+
+         const otp = await createOrReplaceOTP(
+            existingUser?._id,
+            OtpTypes.SIGNUP,
+         );
+
+         sendEmail(
+            existingUser?.email,
+            "Your account verification OTP has been resent",
+            `Your Account OTP is ${otp.otp}`,
+            `<h1>Your Account OTP is ${otp.otp}</h1>`,
+            configs.nodeMailer.replyTo,
+         );
+
+         return {
+            message: `OTP resent successfully. Verify your account.`,
+         };
+      }
+   }
+
+   // ?? Check this phone number already in use?:
+   const associatedUserWithPhone = await User.findOne({
+      phone,
+   });
+
+   if (associatedUserWithPhone) {
+      throw new AppError(
+         httpStatus.BAD_REQUEST,
+         "This phone number already in use.",
+      );
+   }
+
+   let newProfileUrl: string | null = null;
+
+   // ?? File Upload:
+   if (profileImage) {
+      const uploadedFile = await uploadFileIntoCloudinary(
+         profileImage,
+         File_FOLDER_NAME.PROFILE_IMAGES,
+      );
+      newProfileUrl = uploadedFile?.url!;
+   }
+
+   // ?? Hash the password:
+   const hashedPassword = await hashPassword(
+      password,
+      configs.passwordSaltRound,
+   );
+
+   // ?? mongoose Session :
+   const mongoSession = await mongoose.startSession();
+
+   try {
+      mongoSession.startTransaction();
+
+      // ?? Create The user into db:
+      const [user] = await User.create(
+         [
+            {
+               name,
+               email,
+               phone,
+               password: hashedPassword,
+               profileImage: newProfileUrl!,
+               authProviders: ["email"],
+            },
+         ],
+         {
+            session: mongoSession,
+         },
+      );
+
+      if (!user) {
+         throw new AppError(httpStatus.BAD_REQUEST, "Failed to create user.");
+      }
+
+      // ?? Create OTP:
+      const otp = await createOrReplaceOTP(
+         user?._id,
+         OtpTypes.SIGNUP,
+         mongoSession,
+      );
+
+      if (!otp) {
+         throw new AppError(httpStatus.BAD_REQUEST, "Failed to save otp");
+      }
+
+      await mongoSession.commitTransaction();
+
+      sendEmail(
+         user?.email,
+         "Your account verification OTP has been sent",
+         `Your Account OTP is ${otp.otp}`,
+         `<h1>Your Account OTP is ${otp.otp}</h1>`,
+         configs.nodeMailer.replyTo,
+      );
+
+      return {
+         message: "Your account created successfully. Verify your account.",
+         userId: user?._id,
+         email: user.email,
+         role: user.role,
+         status: user.status,
+      };
+   } catch (error) {
+      if (newProfileUrl) {
+         deleteFileByUrl(newProfileUrl).catch((err) => console.log(err));
+      }
+      await mongoSession.abortTransaction();
+      throw error;
+   } finally {
+      await mongoSession.endSession();
+   }
+};
+
+/**
+ * RESEND SIGNUP OTP:
+ */
+const resendSignupOTP = async (payload: TResendSignupOTPPayloadType) => {
+   const { email } = payload;
+
+   // ?? Find User with email:
+   const user = await User.findOne({
+      email,
+   });
+   if (!user) {
+      throw new NotFoundError("User not found.");
+   }
+
+   // ?? Check  is OTP already verified:
+   if (user.isOtpVerified) {
+      throw new BadRequest("You account has already been verified.");
+   }
+
+   // ?? Check NOT
+   if (user.status !== UserStatus.PENDING) {
+      throw new BadRequest(
+         `You account is not pending, current status "${user.status}".`,
+      );
+   }
+
+   // ?? Find OTP:
+   const otp = await Otp.findOne({
+      user: user?._id,
+      type: OtpTypes.SIGNUP,
+   });
+
+   // ?? Check  Cooldown period:
+   if (otp) {
+      checkResendCoolDown(otp.lastSentAt);
+   }
+
+   // ?? Generate a new OTP:
+   const newOtp = await createOrReplaceOTP(user?._id, OtpTypes.SIGNUP);
+
+   if (!newOtp) {
+      throw new BadRequest("Failed to generate new OTP.");
+   }
+
+   sendEmail(
+      user?.email,
+      "Your account verification OTP has been resent",
+      `Your Account OTP is ${newOtp.otp}`,
+      `<h1>Your Account OTP is ${newOtp.otp}</h1>`,
+      configs.nodeMailer.replyTo,
+   );
+};
+
+/**
+ * VERIFY SIGNUP OTP:
+ */
+
+const verifySignupOTP = async (payload: TVerifySignupOTPPayloadType) => {
+   const { email, otp } = payload;
+
+   // ?? Find User with email:
+   const user = await User.findOne({
+      email,
+   });
+   if (!user) {
+      throw new NotFoundError("User not found.");
+   }
+
+   // ?? Check  is OTP already verified:
+   if (user.isOtpVerified) {
+      throw new BadRequest("You account has already been verified.");
+   }
+
+   // ?? Check NOT
+   if (user.status !== UserStatus.PENDING) {
+      throw new BadRequest(
+         `You account is not pending, current status "${user.status}".`,
+      );
+   }
+
+   // ?? Find OTP:
+   const existingOTP = await Otp.findOne({
+      user: user?._id,
+      type: OtpTypes.SIGNUP,
+   });
+
+   if (!existingOTP) {
+      throw new BadRequest("Invalid OTP");
+   }
+
+   // ?? Is OTP Matched?:
+   const isOtpMatched = await comparePassword(otp, existingOTP.otpHash);
+   if (!isOtpMatched) {
+      throw new BadRequest("Invalid OTP");
+   }
+
+   const mongoSession = await mongoose.startSession();
+
+   try {
+      mongoSession.startTransaction();
+      user.isOtpVerified = true;
+      user.status = UserStatus.ACTIVE;
+
+      await user.save({
+         session: mongoSession,
+      });
+
+      await Otp.findOneAndDelete({
+         user: user?._id,
+         otpHash: existingOTP.otpHash,
+      });
+
+      await mongoSession.commitTransaction();
+      return null;
+   } catch (error) {
+      await mongoSession.abortTransaction();
+      throw error;
+   } finally {
+      await mongoSession.endSession();
+   }
 };
 
 const updateUser = async (id: string, payload: TUpdateUserPayloadType) => {
@@ -107,6 +380,8 @@ const deleteUserById = async (id: string) => {
 
 export const userServices = {
    createUser,
+   resendSignupOTP,
+   verifySignupOTP,
    updateUser,
    getAllUser,
    getUserById,
