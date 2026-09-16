@@ -43,6 +43,12 @@ router.post(
   userControllers.forgotPassword,
 );
 
+router.post(
+  "/resend-reset-otp",
+  validateRequest(userValidations.resendResetPasswordOTPSchema),
+  userControllers.resendResetPasswordOTP,
+);
+
 router.patch(
   "/:id",
   validateRequest(userValidations.updateUserSchema),

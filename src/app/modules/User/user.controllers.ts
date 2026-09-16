@@ -54,6 +54,16 @@ const forgotPassword = catchAsync(async (req, res) => {
   });
 });
 
+const resendResetPasswordOTP = catchAsync(async (req, res) => {
+  const result = await userServices.resendResetPasswordOTP(req.body);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: "Password reset OTP has been resent to your email.",
+    data: result,
+  });
+});
+
 const updateUser = catchAsync(async (req, res) => {
   const result = await userServices.updateUser(
     req.params.id as string,
@@ -104,6 +114,7 @@ export const userControllers = {
   verifySignupOTP,
   login,
   forgotPassword,
+  resendResetPasswordOTP,
   updateUser,
   getAllUser,
   getUserById,

@@ -68,9 +68,7 @@ export const createOrReplaceOTP = async (
 export const checkResendCoolDown = (lastSentAt: Date) => {
   // ?? Resend cooldown window:
   const elapsed = moment().diff(lastSentAt);
-  const cooldownMs = configs.otpSettings.resendWindow * 1000;
-
-  console.log("remainingSeconds", Math.ceil((cooldownMs - elapsed) / 1000));
+  const cooldownMs = configs.otpSettings.resendWindowInSeconds * 1000;
 
   if (elapsed < cooldownMs) {
     const remainingSeconds = Math.ceil((cooldownMs - elapsed) / 1000);

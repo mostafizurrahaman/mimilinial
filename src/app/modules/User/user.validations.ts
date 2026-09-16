@@ -61,6 +61,12 @@ const forgotPasswordSchema = z.object({
   }),
 });
 
+const resendResetPasswordOTPSchema = z.object({
+  body: z.object({
+    email: requiredEmail("Email"),
+  }),
+});
+
 const updateUserSchema = z.object({
   params: z.object({
     id: requiredString("ID"),
@@ -98,6 +104,7 @@ export const userValidations = {
   verifySignupOTPSchema,
   loginSchema,
   forgotPasswordSchema,
+  resendResetPasswordOTPSchema,
   updateUserSchema,
   getAllUserSchema,
   getUserByIdSchema,
@@ -116,6 +123,9 @@ export type TVerifySignupOTPPayloadType = z.infer<
 export type TLoginPayloadType = z.infer<typeof loginSchema.shape.body>;
 export type TForgotPasswordPayloadType = z.infer<
   typeof forgotPasswordSchema.shape.body
+>;
+export type TResendForgotPasswordOTPPayloadType = z.infer<
+  typeof resendResetPasswordOTPSchema.shape.body
 >;
 export type TUpdateUserPayloadType = z.infer<
   typeof updateUserSchema.shape.body

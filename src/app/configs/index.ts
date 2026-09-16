@@ -52,7 +52,7 @@ const envSchema = z.object({
 
   OTP_EXPIRES_IN: z.string().transform(Number).default(5),
   OTP_DIGITS: z.string().transform(Number).default(6),
-  OTP_RESEND_WINDOW: z.string().transform(Number).default(60),
+  OTP_RESEND_WINDOW_SECOND: z.string().transform(Number).default(60),
 
   CLOUDINARY_CLOUD_NAME: z.string(),
   CLOUDINARY_API_SECRET: z.string(),
@@ -124,7 +124,7 @@ export const configs = {
   otpSettings: {
     expiresIn: env.OTP_EXPIRES_IN,
     digits: env.OTP_DIGITS,
-    resendWindow: env.OTP_RESEND_WINDOW,
+    resendWindowInSeconds: env.OTP_RESEND_WINDOW_SECOND,
   },
 
   cloudinary: {

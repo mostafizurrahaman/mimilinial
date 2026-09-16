@@ -6,9 +6,3 @@ export class ConflictError extends AppError {
     super(httpStatus.CONFLICT, message, stack);
   }
 }
-
-export class DoneError extends AppError {
-  constructor(message: string, stack = "") {
-    super(httpStatus.DONE, message, stack);
-  }
-}

@@ -414,8 +414,6 @@ const forgotPassword = async (payload: TForgotPasswordPayloadType) => {
     type: OtpTypes.RESET,
   });
 
-  console.log("otp >> << ", otp?.otpHash);
-  
   if (otp) {
     checkResendCoolDown(otp.lastSentAt);
   }
@@ -437,7 +435,81 @@ const forgotPassword = async (payload: TForgotPasswordPayloadType) => {
 
   return {
     resendAvailableAt: moment(newOTP?.otpRecord?.lastSentAt)
-      .add(configs.otpSettings.resendWindow, "minute")
+      .add(configs.otpSettings.resendWindowInSeconds, "seconds")
+      ?.toDate(),
+  };
+};
+
+/**
+ * Resend Reset password OTP:
+ */
+const resendResetPasswordOTP = async (payload: TResendSignupOTPPayloadType) => {
+  const { email } = payload;
+
+  // ?? Find User with email:
+  const user = await User.findOne({
+    email,
+  });
+
+  if (!user) {
+    throw new NotFoundError("User not found.");
+  }
+
+  // ?? Check  is OTP already verified:
+  if (!user.isOtpVerified) {
+    throw new BadRequest("OTP is not verified yet. Please verify OTP.");
+  }
+
+  // ?? Check is account still pending?:
+  if (user.status === UserStatus.PENDING) {
+    throw new ForbiddenError(
+      `Your account is Pending yet. Please verify your account.`,
+    );
+  }
+
+  // ?? Check is account blocked:
+  if (user.status === UserStatus.BLOCKED) {
+    throw new ForbiddenError(`Your account is blocked.`);
+  }
+
+  // ?? Check is account deleted ?:
+  if (user.status === UserStatus.DELETED) {
+    throw new ForbiddenError("You account has been deleted.");
+  }
+
+  // ?? Check is account active ?:
+  if (user.status !== UserStatus.ACTIVE) {
+    throw new ForbiddenError("You account is not active yet.");
+  }
+
+  //  ?? Has any existing OTP?:
+  const otp = await Otp.findOne({
+    user: user?._id,
+    type: OtpTypes.RESET,
+  });
+
+  if (otp) {
+    checkResendCoolDown(otp.lastSentAt);
+  }
+
+  // ?? Generate a new OTP:
+  const newOTP = await createOrReplaceOTP(user?._id, OtpTypes.RESET);
+
+  sendEmail(
+    user?.email,
+    "Your New Password Reset OTP",
+    `Your new password reset OTP is ${newOTP.otp}. This OTP will expire shortly. If you did not request a password reset, please ignore this email.`,
+    `<h1>Password Reset OTP</h1>
+   <p>Here is your new password reset OTP:</p>
+   <h2>${newOTP.otp}</h2>
+   <p>This OTP will expire shortly.</p>
+   <p>If you did not request a password reset, please ignore this email.</p>`,
+    configs.nodeMailer.replyTo,
+  );
+
+  return {
+    resendAvailableAt: moment(newOTP?.otpRecord?.lastSentAt)
+      .add(configs.otpSettings.resendWindowInSeconds, "seconds")
       ?.toDate(),
   };
 };
@@ -539,6 +611,7 @@ export const userServices = {
   verifySignupOTP,
   login,
   forgotPassword,
+  resendResetPasswordOTP,
   updateUser,
   getAllUser,
   getUserById,
