@@ -4,16 +4,21 @@ import {
    optionalString,
    optionalDate,
    requiredString,
+   enumString,
+   requiredMongooseId,
 } from "@/app/utils/zod";
-import { userSortableFields } from "./user.constants";
+import { userSortableFields, UserStatus } from "./user.constants";
 import { sortOrderValues } from "@/app/constants";
 import z from "zod";
 
-const updateUserSchema = z.object({
+const updateUserStatusSchema = z.object({
    params: z.object({
-      id: requiredString("ID"),
+      id: requiredMongooseId("ID"),
    }),
-   body: z.object({}),
+   body: z.object({
+      status: enumString([UserStatus.BLOCKED, UserStatus.ACTIVE], "Status"),
+      reason: optionalString("Reason").nullish(),
+   }),
 });
 
 const getAllUserSchema = z.object({
@@ -41,14 +46,14 @@ const deleteUserByIdSchema = z.object({
 });
 
 export const userValidations = {
-   updateUserSchema,
+   updateUserSchema: updateUserStatusSchema,
    getAllUserSchema,
    getUserByIdSchema,
    deleteUserByIdSchema,
 };
 
-export type TUpdateUserPayloadType = z.infer<
-   typeof updateUserSchema.shape.body
+export type TUserStatusPayloadType = z.infer<
+   typeof updateUserStatusSchema.shape.body
 >;
 export type TGetAllUserQueryParamsType = z.infer<
    typeof getAllUserSchema.shape.query

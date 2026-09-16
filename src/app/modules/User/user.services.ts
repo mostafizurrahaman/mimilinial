@@ -1,12 +1,17 @@
 import httpStatus from "http-status";
 import type { PipelineStage } from "mongoose";
 import type {
-   TUpdateUserPayloadType,
    TGetAllUserQueryParamsType,
+   TUserStatusPayloadType,
 } from "./user.validations";
-import { AppError } from "@/app/errors";
+import { AppError, BadRequest, NotFoundError } from "@/app/errors";
 import { User } from "./user.model";
-import { userSearchableFields } from "./user.constants";
+import {
+   UserAccessLevel,
+   UserRoles,
+   userSearchableFields,
+   UserStatus,
+} from "./user.constants";
 import type { IUserDoc } from "./user.interfaces";
 
 const getMe = async (user: IUserDoc) => {
@@ -26,18 +31,68 @@ const getMe = async (user: IUserDoc) => {
    };
 };
 
-const updateUser = async (id: string, payload: TUpdateUserPayloadType) => {
-   const result = await User.findOneAndUpdate(
-      { _id: id },
-      { $set: payload },
-      { new: true },
-   );
+const updateUserStatus = async (
+   user: IUserDoc,
+   targetUserId: string,
+   payload: TUserStatusPayloadType,
+) => {
+   const { status, reason } = payload;
+   // Check if the target user exists
+   const targetUser = await User.findById(targetUserId);
 
-   if (!result) {
-      throw new AppError(httpStatus.NOT_FOUND, "User not found");
+   if (!targetUser) {
+      throw new NotFoundError("Target user not found.");
    }
 
-   return result;
+   // Prevent users from updating their own status
+   if (targetUser._id.toString() === user._id.toString()) {
+      throw new BadRequest("You cannot update your own status.");
+   }
+
+   // Get access levels for both users
+   const actorUserAccessLevel = UserAccessLevel?.[user?.role];
+   const targetUserAccessLevel = UserAccessLevel?.[targetUser?.role];
+
+   // Ensure the actor has a higher access level than the target user
+   if (actorUserAccessLevel <= targetUserAccessLevel) {
+      throw new BadRequest(
+         "You do not have permission to update this user's status.",
+      );
+   }
+
+   // Check  is user status is pending?
+   if (
+      targetUser.status === UserStatus.PENDING ||
+      targetUser.status === UserStatus.DELETED
+   ) {
+      throw new BadRequest(
+         `You do not update ${targetUser.status} user's status.`,
+      );
+   }
+
+   // Check if the user's status is already the requested status
+   if (targetUser.status === status) {
+      throw new BadRequest(`User is already ${status.toLowerCase()}.`);
+   }
+
+   targetUser.status = status;
+
+   if (targetUser.status === UserStatus.BLOCKED) {
+      targetUser.blockedReason = reason as string;
+      targetUser.blockedAt = new Date();
+   } else {
+      targetUser.blockedReason = null;
+      targetUser.blockedAt = null;
+   }
+
+   await targetUser.save();
+
+   return {
+      message:
+         targetUser?.status === UserStatus.ACTIVE
+            ? "User has been activated successfully."
+            : "User has been blocked successfully. ",
+   };
 };
 
 const getAllUser = async (query: TGetAllUserQueryParamsType) => {
@@ -119,7 +174,7 @@ const deleteUserById = async (id: string) => {
 
 export const userServices = {
    getMe,
-   updateUser,
+   updateUserStatus,
    getAllUser,
    getUserById,
    deleteUserById,

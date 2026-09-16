@@ -8,6 +8,12 @@ export const UserRoles = {
    USER: "user",
 } as const;
 
+export const UserAccessLevel = {
+   [UserRoles.SUPER_ADMIN]: 10,
+   [UserRoles.ADMIN]: 9,
+   [UserRoles.USER]: 1,
+} as const;
+
 export const UserStatus = {
    PENDING: "pending",
    ACTIVE: "active",

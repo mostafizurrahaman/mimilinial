@@ -13,16 +13,16 @@ const getMe = catchAsync(async (req, res) => {
    });
 });
 
-const updateUser = catchAsync(async (req, res) => {
-   const result = await userServices.updateUser(
-      req.params.id as string,
-      req.body,
-   );
+const updateUserStatus = catchAsync(async (req, res) => {
+   const user = await getUserFromRequest(req);
+   const userId = req.params.id as string;
+
+   const result = await userServices.updateUserStatus(user, userId, req.body);
 
    sendResponse(res, {
       statusCode: httpStatus.OK,
-      message: "The user updated successfully!",
-      data: result,
+      message: result.message || "User status updated successfully.",
+      data: null,
    });
 });
 
@@ -59,7 +59,7 @@ const deleteUserById = catchAsync(async (req, res) => {
 
 export const userControllers = {
    getMe,
-   updateUser,
+   updateUserStatus,
    getAllUser,
    getUserById,
    deleteUserById,

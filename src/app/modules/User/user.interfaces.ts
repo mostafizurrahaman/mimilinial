@@ -27,12 +27,12 @@ export interface IUser {
    isOtpVerified: boolean;
 
    // reason:
-   blockedReason?: string;
-   deletionReason?: string;
+   blockedReason?: string | null;
+   deletionReason?: string | null;
 
    // common timestamps:
-   blockedAt?: Date;
-   deletedAt?: Date;
+   blockedAt?: Date | null;
+   deletedAt?: Date | null;
    passwordChangedAt?: Date;
    logOutAt?: Date;
    lastLoginAt?: Date;
