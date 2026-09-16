@@ -7,6 +7,24 @@ import type {
 import { AppError } from "@/app/errors";
 import { User } from "./user.model";
 import { userSearchableFields } from "./user.constants";
+import type { IUserDoc } from "./user.interfaces";
+
+const getMe = async (user: IUserDoc) => {
+   return {
+      userId: user?._id,
+      name: user?.name,
+      email: user?.email,
+      phone: user?.phone,
+      role: user?.role,
+      status: user?.status,
+      profileImage: user?.profileImage,
+      isOtpVerified: user?.isOtpVerified,
+      authProviders: user?.authProviders,
+      isTwoFactorEnabled: user?.isTwoFactorEnabled,
+      createdAt: user?.createdAt,
+      updatedAt: user?.updatedAt,
+   };
+};
 
 const updateUser = async (id: string, payload: TUpdateUserPayloadType) => {
    const result = await User.findOneAndUpdate(
@@ -100,6 +118,7 @@ const deleteUserById = async (id: string) => {
 };
 
 export const userServices = {
+   getMe,
    updateUser,
    getAllUser,
    getUserById,

@@ -1,6 +1,17 @@
 import httpStatus from "http-status";
 import { userServices } from "./user.services";
-import { sendResponse, catchAsync } from "@/app/utils";
+import { sendResponse, catchAsync, getUserFromRequest } from "@/app/utils";
+
+const getMe = catchAsync(async (req, res) => {
+   const user = await getUserFromRequest(req);
+   const result = await userServices.getMe(user);
+
+   sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: "User profile is retrieved successfully.",
+      data: result,
+   });
+});
 
 const updateUser = catchAsync(async (req, res) => {
    const result = await userServices.updateUser(
@@ -47,6 +58,7 @@ const deleteUserById = catchAsync(async (req, res) => {
 });
 
 export const userControllers = {
+   getMe,
    updateUser,
    getAllUser,
    getUserById,

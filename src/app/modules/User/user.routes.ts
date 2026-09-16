@@ -2,8 +2,11 @@ import express, { Router } from "express";
 import { userControllers } from "./user.controllers";
 import { userValidations } from "./user.validations";
 import { validateRequest } from "@/app/middlewares/validate-request";
+import { auth } from "@/app/middlewares/auth";
 
 const router: Router = express.Router();
+
+router.get("/me", auth(), userControllers.getMe);
 
 router.patch(
    "/:id",
