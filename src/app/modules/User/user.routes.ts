@@ -1,11 +1,10 @@
 import express, { Router } from "express";
 import { userControllers } from "./user.controllers";
 import { userValidations } from "./user.validations";
-import { validateRequest } from "../../middlewares";
-import { auth } from "../../middlewares/auth";
+import { validateRequest } from "@/app/middlewares/validate-request";
+import { auth } from "@/app/middlewares/auth";
 import { UserRoles } from "./user.constants";
-import { multerFactory } from "../../utils";
-import { validate } from "zod";
+import { multerFactory } from "@/app/utils/multer";
 
 const router: Router = express.Router();
 
@@ -44,33 +43,46 @@ router.post(
 );
 
 router.post(
-  "/resend-reset-otp",
-  validateRequest(userValidations.resendResetPasswordOTPSchema),
-  userControllers.resendResetPasswordOTP,
+  "/verify-reset-otp",
+  validateRequest(userValidations.verifyResetPasswordOTPSchema),
+  userControllers.verifyResetPasswordOTP,
 );
 
-router.patch(
-  "/:id",
-  validateRequest(userValidations.updateUserSchema),
-  userControllers.updateUser,
+router.post(
+  "/reset-password",
+  validateRequest(userValidations.resetPasswordSchema),
+  userControllers.resetPassword,
 );
 
-router.get(
-  "/all",
-  validateRequest(userValidations.getAllUserSchema),
-  userControllers.getAllUser,
+router.post(
+  "/change-password",
+  auth(),
+  validateRequest(userValidations.changePasswordSchema),
+  userControllers.changePassword,
 );
 
-router.get(
-  "/:id",
-  validateRequest(userValidations.getUserByIdSchema),
-  userControllers.getUserById,
-);
+// router.patch(
+//   "/:id",
+//   validateRequest(userValidations.updateUserSchema),
+//   userControllers.updateUser,
+// );
 
-router.delete(
-  "/:id",
-  validateRequest(userValidations.deleteUserByIdSchema),
-  userControllers.deleteUserById,
-);
+// router.get(
+//   "/all",
+//   validateRequest(userValidations.getAllUserSchema),
+//   userControllers.getAllUser,
+// );
+
+// router.get(
+//   "/:id",
+//   validateRequest(userValidations.getUserByIdSchema),
+//   userControllers.getUserById,
+// );
+
+// router.delete(
+//   "/:id",
+//   validateRequest(userValidations.deleteUserByIdSchema),
+//   userControllers.deleteUserById,
+// );
 
 export const userRoutes = router;

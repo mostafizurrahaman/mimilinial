@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import jwt from "jsonwebtoken";
 
-import { AppError } from "../errors";
+import { AppError } from "@/app/errors";
 import httpStatus from "http-status";
-import type { IJwtUserPayload } from "../interfaces";
+import type { IJwtUserPayload } from "@/app/interfaces";
 // 1. Create Token
 export const createToken = (
   payload: IJwtUserPayload,

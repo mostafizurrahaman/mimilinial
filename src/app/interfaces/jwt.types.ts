@@ -1,5 +1,5 @@
 import type { JwtPayload } from "jsonwebtoken";
-import type { TUserRole, TUserStatus } from "../modules/User";
+import type { TUserRole, TUserStatus } from "@/app/modules/User";
 
 export interface IJwtUserPayload extends JwtPayload {
   _id: string;

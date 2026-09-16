@@ -1,10 +1,10 @@
 import type { Types } from "mongoose";
 import type { TOtpType } from "./otp.constants";
-import { generateOtp, hashPassword } from "../../utils";
-import { configs } from "../../configs";
+import { generateOtp, hashPassword } from "@/app/utils";
+import { configs } from "@/app/configs";
 import { Otp } from "./otp.model";
 import moment from "moment";
-import { AppError, BadRequest } from "../../errors";
+import { AppError, BadRequest } from "@/app/errors";
 import httpStatus from "http-status";
 import type mongoose from "mongoose";
 

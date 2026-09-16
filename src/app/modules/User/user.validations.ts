@@ -1,15 +1,15 @@
-import z, { keyof } from "zod";
 import {
-  requiredString,
   optionalNumber,
   optionalEnumString,
   optionalString,
   optionalDate,
   requiredEmail,
-} from "../../utils";
+  requiredString,
+} from "@/app/utils/zod";
 import { userSortableFields } from "./user.constants";
-import { bdPhoneRegex, sortOrderValues } from "../../constants";
-import { configs } from "../../configs";
+import { bdPhoneRegex, sortOrderValues } from "@/app/constants";
+import { configs } from "@/app/configs";
+import z from "zod";
 
 const createUserSchema = z.object({
   body: z.object({
@@ -61,10 +61,60 @@ const forgotPasswordSchema = z.object({
   }),
 });
 
-const resendResetPasswordOTPSchema = z.object({
+const verifyResetPasswordOTPSchema = z.object({
   body: z.object({
     email: requiredEmail("Email"),
+    otp: z
+      .string({
+        error: "OTP is required.",
+      })
+      .length(configs.otpSettings.digits || 6, {
+        message: "OTP must be exactly 6 digits",
+      })
+      .regex(/^\d+$/, { message: "OTP must contain only numbers" }),
   }),
+});
+
+const resetPasswordSchema = z.object({
+  body: z.object({
+    token: requiredString("Token"),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .regex(/[a-z]/, "Password must contain a lowercase letter")
+      .regex(/[A-Z]/, "Password must contain an uppercase letter")
+      .regex(/\d/, "Password must contain a number")
+      .regex(/[@$!%*?&]/, "Password must contain a special character"),
+  }),
+});
+
+const changePasswordSchema = z.object({
+  body: z
+    .object({
+      oldPassword: z
+        .string()
+        .min(8, "Password must be at least 8 characters")
+        .regex(/[a-z]/, "Password must contain a lowercase letter")
+        .regex(/[A-Z]/, "Password must contain an uppercase letter")
+        .regex(/\d/, "Password must contain a number")
+        .regex(/[@$!%*?&]/, "Password must contain a special character"),
+      newPassword: z
+        .string()
+        .min(8, "Password must be at least 8 characters")
+        .regex(/[a-z]/, "Password must contain a lowercase letter")
+        .regex(/[A-Z]/, "Password must contain an uppercase letter")
+        .regex(/\d/, "Password must contain a number")
+        .regex(/[@$!%*?&]/, "Password must contain a special character"),
+    })
+    .superRefine((data, ctx) => {
+      if (data.oldPassword === data.newPassword) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["oldPassword"],
+          message: "You cannot reuse same password.",
+        });
+      }
+    }),
 });
 
 const updateUserSchema = z.object({
@@ -104,7 +154,10 @@ export const userValidations = {
   verifySignupOTPSchema,
   loginSchema,
   forgotPasswordSchema,
-  resendResetPasswordOTPSchema,
+  verifyResetPasswordOTPSchema,
+  resetPasswordSchema,
+  changePasswordSchema,
+
   updateUserSchema,
   getAllUserSchema,
   getUserByIdSchema,
@@ -124,9 +177,16 @@ export type TLoginPayloadType = z.infer<typeof loginSchema.shape.body>;
 export type TForgotPasswordPayloadType = z.infer<
   typeof forgotPasswordSchema.shape.body
 >;
-export type TResendForgotPasswordOTPPayloadType = z.infer<
-  typeof resendResetPasswordOTPSchema.shape.body
+export type TVerifyResetPasswordOTPType = z.infer<
+  typeof verifyResetPasswordOTPSchema.shape.body
 >;
+export type TResetPasswordPayloadType = z.infer<
+  typeof resetPasswordSchema.shape.body
+>;
+export type TChangePasswordPayload = z.infer<
+  typeof changePasswordSchema.shape.body
+>;
+
 export type TUpdateUserPayloadType = z.infer<
   typeof updateUserSchema.shape.body
 >;

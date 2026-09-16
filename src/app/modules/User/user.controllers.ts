@@ -1,7 +1,7 @@
 import httpStatus from "http-status";
 import { userServices } from "./user.services";
-import { sendResponse, catchAsync } from "../../utils";
-import type { TMulterFile } from "../../interfaces/multer.types";
+import { sendResponse, catchAsync, getUserFromRequest } from "@/app/utils";
+import type { TMulterFile } from "@/app/interfaces/multer.types";
 
 const createUser = catchAsync(async (req, res) => {
   const profileImage = req.file as TMulterFile;
@@ -54,69 +54,98 @@ const forgotPassword = catchAsync(async (req, res) => {
   });
 });
 
-const resendResetPasswordOTP = catchAsync(async (req, res) => {
-  const result = await userServices.resendResetPasswordOTP(req.body);
+const verifyResetPasswordOTP = catchAsync(async (req, res) => {
+  const result = await userServices.verifyResetPasswordOTP(req.body);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
-    message: "Password reset OTP has been resent to your email.",
+    message: "OTP verified successfully.",
     data: result,
   });
 });
 
-const updateUser = catchAsync(async (req, res) => {
-  const result = await userServices.updateUser(
-    req.params.id as string,
-    req.body,
-  );
+const resetPassword = catchAsync(async (req, res) => {
+  const result = await userServices.resetPassword(req.body);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
-    message: "The user updated successfully!",
+    message: "Password has been reset successfully.",
     data: result,
   });
 });
 
-const getAllUser = catchAsync(async (req, res) => {
-  const result = await userServices.getAllUser(req.query);
+const changePassword = catchAsync(async (req, res) => {
+  const user = await getUserFromRequest(req);
+  const result = await userServices.changePassword(user, req.body);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
-    message: "The user retrieved successfully!",
-    data: result.data,
-    meta: result.meta,
-  });
-});
-
-const getUserById = catchAsync(async (req, res) => {
-  const result = await userServices.getUserById(req.params.id as string);
-
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    message: "The user retrieved successfully!",
+    message: "Password has been updated.",
     data: result,
   });
 });
 
-const deleteUserById = catchAsync(async (req, res) => {
-  const result = await userServices.deleteUserById(req.params.id as string);
+// const updateUser = catchAsync(async (req, res) => {
+//   const result = await userServices.updateUser(
+//     req.params.id as string,
+//     req.body,
+//   );
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    message: "The user deleted successfully!",
-    data: result,
-  });
-});
+//   sendResponse(res, {
+//     statusCode: httpStatus.OK,
+//     message: "The user updated successfully!",
+//     data: result,
+//   });
+// });
+
+// const getAllUser = catchAsync(async (req, res) => {
+//   const result = await userServices.getAllUser(req.query);
+
+//   sendResponse(res, {
+//     statusCode: httpStatus.OK,
+//     message: "The user retrieved successfully!",
+//     data: result.data,
+//     meta: result.meta,
+//   });
+// });
+
+// const getUserById = catchAsync(async (req, res) => {
+//   const result = await userServices.getUserById(req.params.id as string);
+
+//   sendResponse(res, {
+//     statusCode: httpStatus.OK,
+//     message: "The user retrieved successfully!",
+//     data: result,
+//   });
+// });
+
+// const deleteUserById = catchAsync(async (req, res) => {
+//   const result = await userServices.deleteUserById(req.params.id as string);
+
+//   sendResponse(res, {
+//     statusCode: httpStatus.OK,
+//     message: "The user deleted successfully!",
+//     data: result,
+//   });
+// });
 
 export const userControllers = {
+  // Signup
   createUser,
   resendSignupOTP,
   verifySignupOTP,
+
+  // Sign In:
   login,
+
+  // Reset password
   forgotPassword,
-  resendResetPasswordOTP,
-  updateUser,
-  getAllUser,
-  getUserById,
-  deleteUserById,
+  verifyResetPasswordOTP,
+  resetPassword,
+  changePassword,
+
+  // updateUser,
+  // getAllUser,
+  // getUserById,
+  // deleteUserById,
 };

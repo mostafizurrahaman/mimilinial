@@ -8,26 +8,41 @@ import type {
   TVerifySignupOTPPayloadType,
   TLoginPayloadType,
   TForgotPasswordPayloadType,
+  TResetPasswordPayloadType,
+  TChangePasswordPayload,
 } from "./user.validations";
 import {
   AppError,
   BadRequest,
   ForbiddenError,
   NotFoundError,
-} from "../../errors";
+  UnauthorizedError,
+} from "@/app/errors";
 import { User } from "./user.model";
 import { UserRoles, userSearchableFields, UserStatus } from "./user.constants";
-import type { TMulterFile } from "../../interfaces/multer.types";
-import uploadFileIntoCloudinary from "../../utils/cloudinary/upload-file";
-import { File_FOLDER_NAME } from "../../constants/folder_name";
-import { comparePassword, createToken, hashPassword } from "../../utils";
-import { configs } from "../../configs";
+import type { TMulterFile } from "@/app/interfaces/multer.types";
+import uploadFileIntoCloudinary from "@/app/utils/cloudinary/upload-file";
+import { File_FOLDER_NAME } from "@/app/constants/folder_name";
+import {
+  catchAsync,
+  comparePassword,
+  createToken,
+  hashPassword,
+  verifyToken,
+} from "@/app/utils";
+import { configs } from "@/app/configs";
 import mongoose from "mongoose";
-import { checkResendCoolDown, createOrReplaceOTP, Otp, OtpTypes } from "../Otp";
-import { deleteFileByUrl } from "../../utils/cloudinary/delete-file";
-import { sendEmail } from "../../utils/send-email";
-import type { IJwtUserPayload } from "../../interfaces";
+import {
+  checkResendCoolDown,
+  createOrReplaceOTP,
+  Otp,
+  OtpTypes,
+} from "@/app/modules/Otp";
+import { deleteFileByUrl } from "@/app/utils/cloudinary/delete-file";
+import { sendEmail } from "@/app/utils/send-email";
+import type { IJwtUserPayload } from "@/app/interfaces";
 import moment from "moment";
+import type { IUser, IUserDoc } from "./user.interfaces";
 
 /**
  * CREATE USER:
@@ -260,6 +275,10 @@ const verifySignupOTP = async (payload: TVerifySignupOTPPayloadType) => {
     throw new BadRequest("Invalid OTP");
   }
 
+  if (existingOTP.expiresAt < moment().toDate()) {
+    throw new BadRequest("OTP has been expired.");
+  }
+
   // ?? Is OTP Matched?:
   const isOtpMatched = await comparePassword(otp, existingOTP.otpHash);
   if (!isOtpMatched) {
@@ -310,7 +329,9 @@ const login = async (payload: TLoginPayloadType) => {
 
   // ?? Check  is OTP already verified:
   if (!user.isOtpVerified) {
-    throw new BadRequest("OTP is not verified yet. Please verify OTP.");
+    throw new BadRequest(
+      "Your account is not verified yet. Please verify with signup OTP.",
+    );
   }
 
   // ?? Check is account still pending?:
@@ -383,7 +404,9 @@ const forgotPassword = async (payload: TForgotPasswordPayloadType) => {
 
   // ?? Check  is OTP already verified:
   if (!user.isOtpVerified) {
-    throw new BadRequest("OTP is not verified yet. Please verify OTP.");
+    throw new BadRequest(
+      "Your account is not verified yet. Please verify with signup OTP.",
+    );
   }
 
   // ?? Check is account still pending?:
@@ -441,10 +464,10 @@ const forgotPassword = async (payload: TForgotPasswordPayloadType) => {
 };
 
 /**
- * Resend Reset password OTP:
+ * Forgot password
  */
-const resendResetPasswordOTP = async (payload: TResendSignupOTPPayloadType) => {
-  const { email } = payload;
+const verifyResetPasswordOTP = async (payload: TVerifySignupOTPPayloadType) => {
+  const { email, otp } = payload;
 
   // ?? Find User with email:
   const user = await User.findOne({
@@ -457,7 +480,9 @@ const resendResetPasswordOTP = async (payload: TResendSignupOTPPayloadType) => {
 
   // ?? Check  is OTP already verified:
   if (!user.isOtpVerified) {
-    throw new BadRequest("OTP is not verified yet. Please verify OTP.");
+    throw new BadRequest(
+      "Your account is not verified yet. Please verify with signup OTP.",
+    );
   }
 
   // ?? Check is account still pending?:
@@ -483,127 +508,242 @@ const resendResetPasswordOTP = async (payload: TResendSignupOTPPayloadType) => {
   }
 
   //  ?? Has any existing OTP?:
-  const otp = await Otp.findOne({
+  const existingOTP = await Otp.findOne({
     user: user?._id,
     type: OtpTypes.RESET,
   });
 
-  if (otp) {
-    checkResendCoolDown(otp.lastSentAt);
+  if (!existingOTP) {
+    throw new BadRequest("Invalid OTP.");
   }
 
-  // ?? Generate a new OTP:
-  const newOTP = await createOrReplaceOTP(user?._id, OtpTypes.RESET);
+  if (existingOTP.expiresAt < moment().toDate()) {
+    throw new BadRequest("OTP has been expired.");
+  }
 
-  sendEmail(
-    user?.email,
-    "Your New Password Reset OTP",
-    `Your new password reset OTP is ${newOTP.otp}. This OTP will expire shortly. If you did not request a password reset, please ignore this email.`,
-    `<h1>Password Reset OTP</h1>
-   <p>Here is your new password reset OTP:</p>
-   <h2>${newOTP.otp}</h2>
-   <p>This OTP will expire shortly.</p>
-   <p>If you did not request a password reset, please ignore this email.</p>`,
-    configs.nodeMailer.replyTo,
-  );
+  // ?? Check is OTP matched:
+  const isOtpMatched = await comparePassword(otp, existingOTP?.otpHash);
+  if (!isOtpMatched) {
+    throw new BadRequest("Invalid OTP.");
+  }
 
-  return {
-    resendAvailableAt: moment(newOTP?.otpRecord?.lastSentAt)
-      .add(configs.otpSettings.resendWindowInSeconds, "seconds")
-      ?.toDate(),
+  // ?? Reset Password Token Payload:
+  const resetPasswordTokenPayload: IJwtUserPayload = {
+    _id: user?._id?.toString(),
+    email: user?.email,
+    name: user?.name,
+    profileImage: user?.profileImage!,
+    status: user?.status,
+    role: user?.role,
   };
-};
 
-const updateUser = async (id: string, payload: TUpdateUserPayloadType) => {
-  const result = await User.findOneAndUpdate(
-    { _id: id },
-    { $set: payload },
-    { new: true },
-  );
-
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, "User not found");
-  }
-
-  return result;
-};
-
-const getAllUser = async (query: TGetAllUserQueryParamsType) => {
-  const {
-    page = 1,
-    limit = 10,
-    searchTerm,
-    sortOrder = "desc",
-    sortBy = "createdAt",
-    fromDate,
-    toDate,
-  } = query;
-
-  const skip = (page - 1) * limit;
-  const pipeline: PipelineStage[] = [];
-
-  if (fromDate || toDate) {
-    const dateFilter: Record<string, unknown> = {};
-    if (fromDate) dateFilter.$gte = new Date(fromDate);
-    if (toDate) dateFilter.$lte = new Date(toDate);
-
-    pipeline.push({ $match: { createdAt: dateFilter } });
-  }
-
-  if (searchTerm) {
-    pipeline.push({
-      $match: {
-        $or: userSearchableFields.map((field) => ({
-          [field]: { $regex: searchTerm, $options: "i" },
-        })),
-      },
-    });
-  }
-
-  pipeline.push({ $sort: { [sortBy]: sortOrder === "asc" ? 1 : -1 } });
-
-  pipeline.push({
-    $facet: {
-      data: [{ $skip: skip }, { $limit: limit }],
-      meta: [{ $count: "total" }],
-    },
+  await Otp.deleteOne({
+    user: user?._id,
+    otpHash: existingOTP.otpHash,
   });
 
-  const aggregated = await User.aggregate(pipeline);
-
-  const data = aggregated?.[0]?.data || [];
-  const total = aggregated?.[0]?.meta?.[0]?.total || 0;
+  // ?? Generate Reset password Token:
+  const token = createToken(
+    resetPasswordTokenPayload,
+    configs.jwt.resetToken.secret,
+    configs.jwt.resetToken.expiresIn,
+  );
 
   return {
-    data,
-    meta: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit) || 1,
-    },
+    token,
   };
 };
 
-const getUserById = async (id: string) => {
-  const result = await User.findById(id);
+/**
+ * Reset Password:
+ */
 
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, "User not found");
+const resetPassword = async (payload: TResetPasswordPayloadType) => {
+  const { token, password } = payload;
+
+  // ?? Valid the token :
+  const decode = verifyToken(token, configs.jwt.resetToken.secret);
+  if (!decode.email) {
+    throw new ForbiddenError("Invalid reset token.");
   }
 
-  return result;
-};
+  //  ?? Find user with this  email:
+  const user = await User.findOne({
+    email: decode.email,
+  });
 
-const deleteUserById = async (id: string) => {
-  const result = await User.findOneAndDelete({ _id: id });
-
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, "User not found");
+  if (!user) {
+    throw new NotFoundError("User not found.");
   }
 
-  return result;
+  // ?? Check  is OTP already verified:
+  if (!user.isOtpVerified) {
+    throw new BadRequest(
+      "Your account is not verified yet. Please verify with signup OTP.",
+    );
+  }
+
+  // ?? Check is account still pending?:
+  if (user.status === UserStatus.PENDING) {
+    throw new ForbiddenError(
+      `Your account is Pending yet. Please verify your account.`,
+    );
+  }
+
+  // ?? Check is account blocked:
+  if (user.status === UserStatus.BLOCKED) {
+    throw new ForbiddenError(`Your account is blocked.`);
+  }
+
+  // ?? Check is account deleted ?:
+  if (user.status === UserStatus.DELETED) {
+    throw new ForbiddenError("You account has been deleted.");
+  }
+
+  // ?? Check is account active ?:
+  if (user.status !== UserStatus.ACTIVE) {
+    throw new ForbiddenError("You account is not active yet.");
+  }
+
+  // ?? Is jwt issued before password changed ?:
+  if (user.isJwtIssuedBeforePasswordChanged(decode.iat as number)) {
+    throw new UnauthorizedError("Token is expired. Please login");
+  }
+
+  // ?? Hash password:
+  const hashedPassword = await hashPassword(
+    password,
+    configs.passwordSaltRound,
+  );
+
+  user.password = hashedPassword;
+  user.passwordChangedAt = new Date();
+
+  await user.save();
+
+  return null;
 };
+
+/**
+ * Change password:
+ */
+
+const changePassword = async (
+  user: IUserDoc,
+  payload: TChangePasswordPayload,
+) => {
+  const { newPassword, oldPassword } = payload;
+
+  // ?? Compare both password:
+  const isPasswordMatched = await comparePassword(oldPassword, user.password);
+  if (!isPasswordMatched) {
+    throw new BadRequest("Credential not matched.");
+  }
+
+  // ?? Hash password:
+  const hashedPassword = await hashPassword(
+    newPassword,
+    configs.passwordSaltRound,
+  );
+
+  user.password = hashedPassword;
+  user.passwordChangedAt = new Date();
+
+  await user.save();
+
+  return null;
+};
+
+// const updateUser = async (id: string, payload: TUpdateUserPayloadType) => {
+//   const result = await User.findOneAndUpdate(
+//     { _id: id },
+//     { $set: payload },
+//     { new: true },
+//   );
+
+//   if (!result) {
+//     throw new AppError(httpStatus.NOT_FOUND, "User not found");
+//   }
+
+//   return result;
+// };
+
+// const getAllUser = async (query: TGetAllUserQueryParamsType) => {
+//   const {
+//     page = 1,
+//     limit = 10,
+//     searchTerm,
+//     sortOrder = "desc",
+//     sortBy = "createdAt",
+//     fromDate,
+//     toDate,
+//   } = query;
+
+//   const skip = (page - 1) * limit;
+//   const pipeline: PipelineStage[] = [];
+
+//   if (fromDate || toDate) {
+//     const dateFilter: Record<string, unknown> = {};
+//     if (fromDate) dateFilter.$gte = new Date(fromDate);
+//     if (toDate) dateFilter.$lte = new Date(toDate);
+
+//     pipeline.push({ $match: { createdAt: dateFilter } });
+//   }
+
+//   if (searchTerm) {
+//     pipeline.push({
+//       $match: {
+//         $or: userSearchableFields.map((field) => ({
+//           [field]: { $regex: searchTerm, $options: "i" },
+//         })),
+//       },
+//     });
+//   }
+
+//   pipeline.push({ $sort: { [sortBy]: sortOrder === "asc" ? 1 : -1 } });
+
+//   pipeline.push({
+//     $facet: {
+//       data: [{ $skip: skip }, { $limit: limit }],
+//       meta: [{ $count: "total" }],
+//     },
+//   });
+
+//   const aggregated = await User.aggregate(pipeline);
+
+//   const data = aggregated?.[0]?.data || [];
+//   const total = aggregated?.[0]?.meta?.[0]?.total || 0;
+
+//   return {
+//     data,
+//     meta: {
+//       page,
+//       limit,
+//       total,
+//       totalPages: Math.ceil(total / limit) || 1,
+//     },
+//   };
+// };
+
+// const getUserById = async (id: string) => {
+//   const result = await User.findById(id);
+
+//   if (!result) {
+//     throw new AppError(httpStatus.NOT_FOUND, "User not found");
+//   }
+
+//   return result;
+// };
+
+// const deleteUserById = async (id: string) => {
+//   const result = await User.findOneAndDelete({ _id: id });
+
+//   if (!result) {
+//     throw new AppError(httpStatus.NOT_FOUND, "User not found");
+//   }
+
+//   return result;
+// };
 
 export const userServices = {
   createUser,
@@ -611,9 +751,13 @@ export const userServices = {
   verifySignupOTP,
   login,
   forgotPassword,
-  resendResetPasswordOTP,
-  updateUser,
-  getAllUser,
-  getUserById,
-  deleteUserById,
+  verifyResetPasswordOTP,
+  resetPassword,
+  changePassword,
+
+  // ??
+  // updateUser,
+  // getAllUser,
+  // getUserById,
+  // deleteUserById,
 };
