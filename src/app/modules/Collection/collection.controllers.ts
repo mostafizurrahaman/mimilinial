@@ -1,0 +1,83 @@
+import httpStatus from "http-status";
+import { collectionServices } from "./collection.services";
+import { sendResponse, catchAsync, getUserFromRequest } from "../../utils";
+import type { TMulterFile } from "@/app/interfaces/multer.types";
+
+// 1. CREATE COLLECTION
+const createCollection = catchAsync(async (req, res) => {
+   const user = await getUserFromRequest(req);
+   const icon = req.file as TMulterFile;
+   const result = await collectionServices.createCollection(
+      user,
+      req.body,
+      icon,
+   );
+
+   sendResponse(res, {
+      statusCode: httpStatus.CREATED,
+      message: "The collection created successfully!",
+      data: result,
+   });
+});
+
+// 2. UPDATE COLLECTION
+const updateCollection = catchAsync(async (req, res) => {
+   const icon = req.file as TMulterFile;
+   const result = await collectionServices.updateCollection(
+      req.params.id as string,
+      req.body,
+      icon,
+   );
+
+   sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: "The collection updated successfully!",
+      data: result,
+   });
+});
+
+// 3. GET ALL COLLECTION
+const getAllCollection = catchAsync(async (req, res) => {
+   const result = await collectionServices.getAllCollection(req.validQuery);
+
+   sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: "The collection retrieved successfully!",
+      data: result.data,
+      meta: result.meta,
+   });
+});
+
+// 4. GET COLLECTION BY ID
+const getCollectionById = catchAsync(async (req, res) => {
+   const result = await collectionServices.getCollectionById(
+      req.params.id as string,
+   );
+
+   sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: "The collection retrieved successfully!",
+      data: result,
+   });
+});
+
+// 5. DELETE COLLECTION BY ID
+const deleteCollectionById = catchAsync(async (req, res) => {
+   const result = await collectionServices.deleteCollectionById(
+      req.params.id as string,
+   );
+
+   sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: "The collection deleted successfully!",
+      data: result,
+   });
+});
+
+export const collectionControllers = {
+   createCollection,
+   updateCollection,
+   getAllCollection,
+   getCollectionById,
+   deleteCollectionById,
+};
