@@ -18,6 +18,7 @@ router.patch(
 
 router.get(
    "/all",
+   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
    validateRequest(userValidations.getAllUserSchema),
    userControllers.getAllUser,
 );

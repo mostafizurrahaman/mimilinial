@@ -31,18 +31,18 @@ const limiter = getRateLimiter(1, 100, "Too many request");
  */
 
 app.use(
-  morgan(":method :url :status :res[content-length] - :response-time ms"),
+   morgan(":method :url :status :res[content-length] - :response-time ms"),
 );
 app.use(helmet());
 app.use(express.json({ type: "application/json" }));
 app.use(cookieParser());
 app.use(
-  cors({
-    origin: "*", //: TODO: Has to implement dynamic cors*
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
+   cors({
+      origin: "*", //: TODO: Has to implement dynamic cors*
+      credentials: true,
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+   }),
 );
 
 /**
@@ -52,15 +52,15 @@ app.use(
  */
 
 app.get("/", (req, res) => {
-  res.json({
-    message: "Server is running now.",
-  });
+   res.json({
+      message: "Server is running now.",
+   });
 });
 
 app.get("/api/v1", (req, res) => {
-  res.json({
-    message: "Version 1 port also healthy now.",
-  });
+   res.json({
+      message: "Version 1 port also healthy now.",
+   });
 });
 
 app.use("/api/v1", allRoutes);

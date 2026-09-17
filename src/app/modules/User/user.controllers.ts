@@ -1,6 +1,7 @@
 import httpStatus from "http-status";
 import { userServices } from "./user.services";
 import { sendResponse, catchAsync, getUserFromRequest } from "@/app/utils";
+import type { TGetAllUserQueryParamsType } from "./user.validations";
 
 const getMe = catchAsync(async (req, res) => {
    const user = await getUserFromRequest(req);
@@ -27,7 +28,11 @@ const updateUserStatus = catchAsync(async (req, res) => {
 });
 
 const getAllUser = catchAsync(async (req, res) => {
-   const result = await userServices.getAllUser(req.query);
+   const user = await getUserFromRequest(req);
+   const result = await userServices.getAllUser(
+      user,
+      req.validQuery as TGetAllUserQueryParamsType,
+   );
 
    sendResponse(res, {
       statusCode: httpStatus.OK,

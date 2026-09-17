@@ -7,7 +7,12 @@ import {
    enumString,
    requiredMongooseId,
 } from "@/app/utils/zod";
-import { userSortableFields, UserStatus } from "./user.constants";
+import {
+   userRoleValues,
+   userSortableFields,
+   UserStatus,
+   userStatusValues,
+} from "./user.constants";
 import { sortOrderValues } from "@/app/constants";
 import z from "zod";
 
@@ -30,6 +35,8 @@ const getAllUserSchema = z.object({
       sortBy: optionalEnumString(userSortableFields, "Sort by"),
       fromDate: optionalDate("From date"),
       toDate: optionalDate("To date"),
+      status: enumString(userStatusValues, "User status"),
+      role: enumString(userRoleValues, "Role"),
    }),
 });
 
@@ -46,10 +53,10 @@ const deleteUserByIdSchema = z.object({
 });
 
 export const userValidations = {
-   updateUserSchema: updateUserStatusSchema,
-   getAllUserSchema,
-   getUserByIdSchema,
-   deleteUserByIdSchema,
+   updateUserSchema: z.compile(updateUserStatusSchema),
+   getAllUserSchema: z.compile(getAllUserSchema),
+   getUserByIdSchema: z.compile(getUserByIdSchema),
+   deleteUserByIdSchema: z.compile(deleteUserByIdSchema),
 };
 
 export type TUserStatusPayloadType = z.infer<

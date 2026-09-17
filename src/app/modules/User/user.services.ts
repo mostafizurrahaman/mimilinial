@@ -10,9 +10,11 @@ import {
    UserAccessLevel,
    UserRoles,
    userSearchableFields,
+   userSortableFields,
    UserStatus,
 } from "./user.constants";
 import type { IUserDoc } from "./user.interfaces";
+import { formatQuery } from "@/app/utils";
 
 const getMe = async (user: IUserDoc) => {
    return {
@@ -95,19 +97,32 @@ const updateUserStatus = async (
    };
 };
 
-const getAllUser = async (query: TGetAllUserQueryParamsType) => {
+const getAllUser = async (
+   user: IUserDoc,
+   query: TGetAllUserQueryParamsType,
+) => {
    const {
-      page = 1,
-      limit = 10,
+      page,
+      limit,
+      skip,
       searchTerm,
-      sortOrder = "desc",
-      sortBy = "createdAt",
+      sortOrder,
+      sortBy,
       fromDate,
       toDate,
-   } = query;
+   } = formatQuery(query, userSortableFields);
 
-   const skip = (page - 1) * limit;
    const pipeline: PipelineStage[] = [];
+
+   if (user) {
+      pipeline.push({
+         $match: {
+            _id: {
+               $ne: user?._id,
+            },
+         },
+      });
+   }
 
    if (fromDate || toDate) {
       const dateFilter: Record<string, unknown> = {};
@@ -127,7 +142,24 @@ const getAllUser = async (query: TGetAllUserQueryParamsType) => {
       });
    }
 
-   pipeline.push({ $sort: { [sortBy]: sortOrder === "asc" ? 1 : -1 } });
+   pipeline.push({ $sort: { [sortBy]: sortOrder ? 1 : -1 } });
+
+   pipeline.push({
+      $project: {
+         userId: "$_id",
+         name: "$name",
+         email: "$email",
+         phone: "$phone",
+         role: "$role",
+         status: "$status",
+         profileImage: "$profileImage",
+         isOtpVerified: "$isOtpVerified",
+         authProviders: "$authProviders",
+         isTwoFactorEnabled: "$isTwoFactorEnabled",
+         createdAt: "$createdAt",
+         updatedAt: "$updatedAt",
+      },
+   });
 
    pipeline.push({
       $facet: {
@@ -152,6 +184,7 @@ const getAllUser = async (query: TGetAllUserQueryParamsType) => {
    };
 };
 
+// TODO: get user by id:
 const getUserById = async (id: string) => {
    const result = await User.findById(id);
 
@@ -162,6 +195,7 @@ const getUserById = async (id: string) => {
    return result;
 };
 
+// TODO: Delete api is pending
 const deleteUserById = async (id: string) => {
    const result = await User.findOneAndDelete({ _id: id });
 

@@ -31,3 +31,28 @@ const app = express();
 
 app.use(helmet());
 ```
+
+```json
+?page=1
+&limit=10
+&searchTerm=
+&sortOrder=
+&sortBy=
+&fromDate=2026-01-01T00:00:00.000Z
+&toDate=2026-12-31T23:59:59.999Z
+&status=
+&role=
+```
+
+```json
+page: 1
+limit: 10
+searchTerm:
+sortOrder:
+sortBy:
+fromDate: 2026-01-01T00:00:00.000Z
+toDate: 2026-12-31T23:59:59.999Z
+status:
+role:
+
+```
