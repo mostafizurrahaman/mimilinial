@@ -38,7 +38,7 @@ export const validateRequest = (schema: ZodObject) => {
             req.cookies = data.cookies;
          }
 
-         req.validQuery = req.query;
+         req.validQuery = data.query;
 
          next();
       } else {
