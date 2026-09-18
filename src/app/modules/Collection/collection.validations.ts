@@ -6,6 +6,7 @@ import {
    optionalString,
    optionalDate,
    requiredStrBoolean,
+   requiredMongooseId,
 } from "../../utils";
 import { collectionSortableFields } from "./collection.constants";
 import { sortOrderValues } from "../../constants";
@@ -14,17 +15,19 @@ import { sortOrderValues } from "../../constants";
 const createCollectionSchema = z.object({
    body: z.object({
       name: requiredString("Name"),
+      description: optionalString("Description").nullish(),
    }),
 });
 
 // 2. UPDATE COLLECTION
 const updateCollectionSchema = z.object({
    params: z.object({
-      id: requiredString("ID"),
+      id: requiredMongooseId("ID"),
    }),
    body: z.object({
       name: requiredString("Name"),
-      isActive: requiredStrBoolean("isActive"),
+      isActive: requiredStrBoolean("isActive").optional(),
+      description: optionalString("Description").nullish(),
    }),
 });
 
@@ -44,14 +47,14 @@ const getAllCollectionSchema = z.object({
 // 4. GET COLLECTION BY ID
 const getCollectionByIdSchema = z.object({
    params: z.object({
-      id: requiredString("ID"),
+      id: requiredMongooseId("Collection ID"),
    }),
 });
 
 // 5. DELETE COLLECTION BY ID
 const deleteCollectionByIdSchema = z.object({
    params: z.object({
-      id: requiredString("ID"),
+      id: requiredMongooseId("Collection ID"),
    }),
 });
 

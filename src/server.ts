@@ -5,6 +5,7 @@ import dns from "node:dns/promises";
 import { configs } from "@/app/configs";
 import { logger } from "@/app/utils";
 import { connectDB } from "@/app/utils/connect-db";
+import { sendSuperAdmin } from "./app/seeds";
 
 // dns.setServers(["1.1.1.1"]);
 
@@ -13,6 +14,8 @@ let server: Server;
 const bootstrap = async () => {
    try {
       await connectDB(configs.databaseUrl);
+
+      await sendSuperAdmin();
 
       // server listen :
       server = app.listen(configs.port, () => {

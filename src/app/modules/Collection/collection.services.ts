@@ -24,7 +24,7 @@ const createCollection = async (
    payload: TCreateCollectionPayloadType,
    icon: TMulterFile,
 ) => {
-   const { name } = payload;
+   const { name, description } = payload;
 
    // ?? Generate slug:
    const slug = createSlug(name);
@@ -54,6 +54,7 @@ const createCollection = async (
       const result = await Collection.create({
          name,
          slug,
+         description: description!,
          icon: iconUrl,
          author: user._id,
          isActive: true,
@@ -107,6 +108,9 @@ const updateCollection = async (
    if (payload.isActive !== undefined)
       existingCollection.isActive = payload.isActive;
 
+   if (payload.description !== undefined)
+      existingCollection.description = payload.description!;
+
    //  Check is any file is there :
    let newUrl: string | null = null;
    const oldUrl = existingCollection?.icon as string;
@@ -117,6 +121,7 @@ const updateCollection = async (
       );
 
       newUrl = uploadedFile?.url as string;
+      existingCollection.icon = uploadedFile?.url as string;
    }
 
    try {
@@ -210,11 +215,22 @@ const getCollectionById = async (id: string) => {
 
 // 5. DELETE COLLECTION BY ID
 const deleteCollectionById = async (id: string) => {
-   const result = await Collection.findOneAndDelete({ _id: id });
+   // TODO: Remove all the related collection data later.
+
+   const result = await Collection.findOneAndDelete(
+      { _id: id },
+      {
+         returnDocument: "after",
+      },
+   );
 
    if (!result) {
       throw new AppError(httpStatus.NOT_FOUND, "Collection not found");
    }
+
+   deleteFileByUrl(result.icon as string).catch((err) =>
+      logger.info("Failed to delete icon url:", err.message),
+   );
 
    return result;
 };

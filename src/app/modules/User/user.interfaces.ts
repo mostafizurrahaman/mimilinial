@@ -14,7 +14,7 @@ export interface IUser {
    // roles:
    role: TUserRole;
    // profile common properties:
-   profileImage?: string;
+   profileImage?: string | null;
 
    // ?? Auth Provider?:
    authProviders: TAuthProviderType[];

@@ -54,6 +54,7 @@ router.get(
 // 5. DELETE COLLECTION BY ID
 router.delete(
    "/:id",
+   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
    validateRequest(collectionValidations.deleteCollectionByIdSchema),
    collectionControllers.deleteCollectionById,
 );

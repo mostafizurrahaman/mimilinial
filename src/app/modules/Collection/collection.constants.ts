@@ -1,7 +1,7 @@
 export const collectionSearchableFields = [
    "name",
    "slug",
-   // "authorName",
+   "description",
    // "authorEmail",
 ] as const;
 export const collectionSortableFields = [

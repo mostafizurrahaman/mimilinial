@@ -21,6 +21,10 @@ const collectionSchema = new Schema<ICollectionDoc>(
          ref: "User",
          required: true,
       },
+      description: {
+         type: String,
+         allowNull: true,
+      },
       icon: {
          type: String,
          allowNull: true,

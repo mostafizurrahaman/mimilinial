@@ -4,6 +4,7 @@ export interface ICollection {
    name: string;
    slug: string;
    isActive: boolean;
+   description: string;
    author: Types.ObjectId;
    icon?: string | null;
 }
