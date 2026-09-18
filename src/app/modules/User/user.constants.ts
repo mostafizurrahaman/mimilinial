@@ -52,3 +52,20 @@ export type TUserRole = (typeof UserRoles)[keyof typeof UserRoles];
 export type TUserStatus = (typeof UserStatus)[keyof typeof UserStatus];
 export type TAuthProviderType =
    (typeof AuthProviders)[keyof typeof AuthProviders];
+
+export const isJwtIssuedBeforePasswordChanged = (
+   passwordChangedAt: Date | null | undefined,
+   jwtIssuedTimestamp: number,
+): boolean => {
+   console.log("Dates", {
+      jwtIssuedTimestamp,
+      passwordChangedAt,
+      passwordChangedAtMili: passwordChangedAt?.getTime(),
+      jwtIssuedTimestampMili: jwtIssuedTimestamp * 1000,
+      isLte:
+         passwordChangedAt &&
+         jwtIssuedTimestamp * 1000 < passwordChangedAt.getTime(),
+   });
+   if (!passwordChangedAt) return false;
+   return jwtIssuedTimestamp * 1000 < passwordChangedAt.getTime();
+};

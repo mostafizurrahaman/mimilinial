@@ -1,119 +1,122 @@
 import httpStatus from "http-status";
-import type { PipelineStage } from "mongoose";
 import type {
-  TCreateOtpPayloadType,
-  TUpdateOtpPayloadType,
-  TGetAllOtpQueryParamsType,
+   TCreateOtpPayloadType,
+   TUpdateOtpPayloadType,
+   TGetAllOtpQueryParamsType,
 } from "./otp.validations";
 import { AppError } from "@/app/errors";
-import { Otp } from "./otp.model";
-import { otpSearchableFields } from "./otp.constants";
+import { db } from "@/app/db";
+import { otps } from "@/app/db/schemas";
+import {
+   eq,
+   and,
+   gte,
+   lte,
+   ilike,
+   or,
+   asc,
+   desc,
+   count,
+   SQL,
+} from "drizzle-orm";
 
 // 1. CREATE OTP
 const createOtp = async (payload: TCreateOtpPayloadType) => {
-  const result = await Otp.create(payload);
-  return result;
+   const [result] = await db.insert(otps).values(payload).returning();
+   return result;
 };
 
 // 2. UPDATE OTP
 const updateOtp = async (id: string, payload: TUpdateOtpPayloadType) => {
-  const result = await Otp.findOneAndUpdate(
-    { _id: id },
-    { $set: payload },
-    { new: true },
-  );
+   const [result] = await db
+      .update(otps)
+      .set(payload)
+      .where(eq(otps.id, id))
+      .returning();
 
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, "Otp not found");
-  }
+   if (!result) {
+      throw new AppError(httpStatus.NOT_FOUND, "Otp not found");
+   }
 
-  return result;
+   return result;
 };
 
 // 3. GET ALL OTP
 const getAllOtp = async (query: TGetAllOtpQueryParamsType) => {
-  const {
-    page = 1,
-    limit = 10,
-    searchTerm,
-    sortOrder = "desc",
-    sortBy = "createdAt",
-    fromDate,
-    toDate,
-  } = query;
+   const {
+      page = 1,
+      limit = 10,
+      searchTerm,
+      sortOrder = "desc",
+      sortBy = "createdAt",
+      fromDate,
+      toDate,
+   } = query;
 
-  const skip = (page - 1) * limit;
-  const pipeline: PipelineStage[] = [];
+   const skip = (page - 1) * limit;
+   const conditions: (SQL | undefined)[] = [];
 
-  if (fromDate || toDate) {
-    const dateFilter: Record<string, unknown> = {};
-    if (fromDate) dateFilter.$gte = new Date(fromDate);
-    if (toDate) dateFilter.$lte = new Date(toDate);
+   if (fromDate) conditions.push(gte(otps.createdAt, new Date(fromDate)));
+   if (toDate) conditions.push(lte(otps.createdAt, new Date(toDate)));
 
-    pipeline.push({ $match: { createdAt: dateFilter } });
-  }
+   const whereClause =
+      conditions.length > 0
+         ? and(...(conditions.filter(Boolean) as SQL[]))
+         : undefined;
 
-  if (searchTerm) {
-    pipeline.push({
-      $match: {
-        $or: otpSearchableFields.map((field) => ({
-          [field]: { $regex: searchTerm, $options: "i" },
-        })),
+   const orderBy = { createdAt: sortOrder === "asc" ? "asc" : "desc" } as const;
+
+   const [data, [countResult]] = await Promise.all([
+      db.query.otps.findMany({
+         where: whereClause ? { RAW: whereClause } : undefined,
+         orderBy,
+         limit,
+         offset: skip,
+      }),
+      db.select({ total: count() }).from(otps).where(whereClause),
+   ]);
+
+   const total = countResult?.total ?? 0;
+
+   return {
+      data,
+      meta: {
+         page,
+         limit,
+         total,
+         totalPages: Math.ceil(total / limit) || 1,
       },
-    });
-  }
-
-  pipeline.push({ $sort: { [sortBy]: sortOrder === "asc" ? 1 : -1 } });
-
-  pipeline.push({
-    $facet: {
-      data: [{ $skip: skip }, { $limit: limit }],
-      meta: [{ $count: "total" }],
-    },
-  });
-
-  const aggregated = await Otp.aggregate(pipeline);
-
-  const data = aggregated?.[0]?.data || [];
-  const total = aggregated?.[0]?.meta?.[0]?.total || 0;
-
-  return {
-    data,
-    meta: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit) || 1,
-    },
-  };
+   };
 };
 
 // 4. GET OTP BY ID
 const getOtpById = async (id: string) => {
-  const result = await Otp.findById(id);
+   const result = await db.query.otps.findFirst({
+      where: { id },
+   });
 
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, "Otp not found");
-  }
+   if (!result) {
+      throw new AppError(httpStatus.NOT_FOUND, "Otp not found");
+   }
 
-  return result;
+   return result;
 };
 
 // 5. DELETE OTP BY ID
 const deleteOtpById = async (id: string) => {
-  const result = await Otp.findOneAndDelete({ _id: id });
+   const [result] = await db.delete(otps).where(eq(otps.id, id)).returning();
 
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, "Otp not found");
-  }
+   if (!result) {
+      throw new AppError(httpStatus.NOT_FOUND, "Otp not found");
+   }
 
-  return result;
+   return result;
 };
 
 export const otpServices = {
-  createOtp,
-  updateOtp,
-  getAllOtp,
-  getOtpById,
-  deleteOtpById,
+   createOtp,
+   updateOtp,
+   getAllOtp,
+   getOtpById,
+   deleteOtpById,
 };

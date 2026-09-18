@@ -1,24 +1,30 @@
 import httpStatus from "http-status";
-import type { PipelineStage } from "mongoose";
 import type {
    TGetAllUserQueryParamsType,
    TUserStatusPayloadType,
 } from "./user.validations";
 import { AppError, BadRequest, NotFoundError } from "@/app/errors";
-import { User } from "./user.model";
-import {
-   UserAccessLevel,
-   UserRoles,
-   userSearchableFields,
-   userSortableFields,
-   UserStatus,
-} from "./user.constants";
-import type { IUserDoc } from "./user.interfaces";
+import { UserAccessLevel, UserStatus } from "./user.constants";
 import { formatQuery } from "@/app/utils";
+import { db } from "@/app/db";
+import { users, type IUser } from "@/app/db/schemas";
+import {
+   eq,
+   ne,
+   and,
+   or,
+   ilike,
+   gte,
+   lte,
+   asc,
+   desc,
+   count,
+   SQL,
+} from "drizzle-orm";
 
-const getMe = async (user: IUserDoc) => {
+const getMe = async (user: IUser) => {
    return {
-      userId: user?._id,
+      userId: user?.id,
       name: user?.name,
       email: user?.email,
       phone: user?.phone,
@@ -26,43 +32,41 @@ const getMe = async (user: IUserDoc) => {
       status: user?.status,
       profileImage: user?.profileImage,
       isOtpVerified: user?.isOtpVerified,
-      authProviders: user?.authProviders,
+      authProvider: user?.authProvider,
       isTwoFactorEnabled: user?.isTwoFactorEnabled,
-      createdAt: user?.createdAt,
-      updatedAt: user?.updatedAt,
    };
 };
 
 const updateUserStatus = async (
-   user: IUserDoc,
+   user: IUser,
    targetUserId: string,
    payload: TUserStatusPayloadType,
 ) => {
    const { status, reason } = payload;
-   // Check if the target user exists
-   const targetUser = await User.findById(targetUserId);
+
+   const targetUser = await db.query.users.findFirst({
+      where: { id: targetUserId },
+   });
 
    if (!targetUser) {
       throw new NotFoundError("Target user not found.");
    }
 
-   // Prevent users from updating their own status
-   if (targetUser._id.toString() === user._id.toString()) {
+   if (targetUser.id === user.id) {
       throw new BadRequest("You cannot update your own status.");
    }
 
-   // Get access levels for both users
-   const actorUserAccessLevel = UserAccessLevel?.[user?.role];
-   const targetUserAccessLevel = UserAccessLevel?.[targetUser?.role];
+   const actorLevel =
+      UserAccessLevel[user?.role as keyof typeof UserAccessLevel] ?? 0;
+   const targetLevel =
+      UserAccessLevel[targetUser?.role as keyof typeof UserAccessLevel] ?? 0;
 
-   // Ensure the actor has a higher access level than the target user
-   if (actorUserAccessLevel <= targetUserAccessLevel) {
+   if (actorLevel <= targetLevel) {
       throw new BadRequest(
          "You do not have permission to update this user's status.",
       );
    }
 
-   // Check  is user status is pending?
    if (
       targetUser.status === UserStatus.PENDING ||
       targetUser.status === UserStatus.DELETED
@@ -72,35 +76,30 @@ const updateUserStatus = async (
       );
    }
 
-   // Check if the user's status is already the requested status
    if (targetUser.status === status) {
       throw new BadRequest(`User is already ${status.toLowerCase()}.`);
    }
 
-   targetUser.status = status;
-
-   if (targetUser.status === UserStatus.BLOCKED) {
-      targetUser.blockedReason = reason as string;
-      targetUser.blockedAt = new Date();
+   const updatePayload: Partial<typeof users.$inferInsert> = { status };
+   if (status === UserStatus.BLOCKED) {
+      updatePayload.blockedReason = reason as string;
+      updatePayload.blockedAt = new Date();
    } else {
-      targetUser.blockedReason = null;
-      targetUser.blockedAt = null;
+      updatePayload.blockedReason = null;
+      updatePayload.blockedAt = null;
    }
 
-   await targetUser.save();
+   await db.update(users).set(updatePayload).where(eq(users.id, targetUserId));
 
    return {
       message:
-         targetUser?.status === UserStatus.ACTIVE
+         status === UserStatus.ACTIVE
             ? "User has been activated successfully."
-            : "User has been blocked successfully. ",
+            : "User has been blocked successfully.",
    };
 };
 
-const getAllUser = async (
-   user: IUserDoc,
-   query: TGetAllUserQueryParamsType,
-) => {
+const getAllUser = async (user: IUser, query: TGetAllUserQueryParamsType) => {
    const {
       page,
       limit,
@@ -110,68 +109,79 @@ const getAllUser = async (
       sortBy,
       fromDate,
       toDate,
-   } = formatQuery(query, userSortableFields);
+   } = formatQuery(query, [
+      "createdAt",
+      "updatedAt",
+      "name",
+      "email",
+      "role",
+      "status",
+   ]);
 
-   const pipeline: PipelineStage[] = [];
+   const conditions: (SQL | undefined)[] = [];
 
-   if (user) {
-      pipeline.push({
-         $match: {
-            _id: {
-               $ne: user?._id,
-            },
-         },
-      });
+   if (user?.id) {
+      conditions.push(ne(users.id, user.id));
    }
 
-   if (fromDate || toDate) {
-      const dateFilter: Record<string, unknown> = {};
-      if (fromDate) dateFilter.$gte = new Date(fromDate);
-      if (toDate) dateFilter.$lte = new Date(toDate);
-
-      pipeline.push({ $match: { createdAt: dateFilter } });
+   if (fromDate) {
+      conditions.push(gte(users.lastActivityAt, new Date(fromDate)));
+   }
+   if (toDate) {
+      conditions.push(lte(users.lastActivityAt, new Date(toDate)));
    }
 
    if (searchTerm) {
-      pipeline.push({
-         $match: {
-            $or: userSearchableFields.map((field) => ({
-               [field]: { $regex: searchTerm, $options: "i" },
-            })),
-         },
-      });
+      conditions.push(
+         or(
+            ilike(users.name, `%${searchTerm}%`),
+            ilike(users.email, `%${searchTerm}%`),
+            ilike(users.phone, `%${searchTerm}%`),
+         ),
+      );
    }
 
-   pipeline.push({ $sort: { [sortBy]: sortOrder ? 1 : -1 } });
+   const whereClause =
+      conditions.length > 0
+         ? and(...(conditions.filter(Boolean) as SQL[]))
+         : undefined;
+   const direction: "asc" | "desc" = sortOrder === 1 ? "asc" : "desc";
 
-   pipeline.push({
-      $project: {
-         userId: "$_id",
-         name: "$name",
-         email: "$email",
-         phone: "$phone",
-         role: "$role",
-         status: "$status",
-         profileImage: "$profileImage",
-         isOtpVerified: "$isOtpVerified",
-         authProviders: "$authProviders",
-         isTwoFactorEnabled: "$isTwoFactorEnabled",
-         createdAt: "$createdAt",
-         updatedAt: "$updatedAt",
-      },
-   });
+   const orderBy =
+      sortBy === "name"
+         ? { name: direction }
+         : sortBy === "email"
+           ? { email: direction }
+           : sortBy === "role"
+             ? { role: direction }
+             : sortBy === "status"
+               ? { status: direction }
+               : { lastActivityAt: direction };
 
-   pipeline.push({
-      $facet: {
-         data: [{ $skip: skip }, { $limit: limit }],
-         meta: [{ $count: "total" }],
-      },
-   });
+   const [rawData, [countResult]] = await Promise.all([
+      db.query.users.findMany({
+         where: whereClause ? { RAW: whereClause } : undefined,
+         orderBy,
+         limit,
+         offset: skip,
+      }),
+      db.select({ total: count() }).from(users).where(whereClause),
+   ]);
 
-   const aggregated = await User.aggregate(pipeline);
+   const data = rawData.map((u) => ({
+      userId: u.id,
+      name: u.name,
+      email: u.email,
+      phone: u.phone,
+      role: u.role,
+      status: u.status,
+      profileImage: u.profileImage,
+      isOtpVerified: u.isOtpVerified,
+      authProvider: u.authProvider,
+      isTwoFactorEnabled: u.isTwoFactorEnabled,
+   }));
 
-   const data = aggregated?.[0]?.data || [];
-   const total = aggregated?.[0]?.meta?.[0]?.total || 0;
+   const total = countResult?.total ?? 0;
 
    return {
       data,
@@ -184,9 +194,10 @@ const getAllUser = async (
    };
 };
 
-// TODO: get user by id:
 const getUserById = async (id: string) => {
-   const result = await User.findById(id);
+   const result = await db.query.users.findFirst({
+      where: { id },
+   });
 
    if (!result) {
       throw new AppError(httpStatus.NOT_FOUND, "User not found");
@@ -195,9 +206,8 @@ const getUserById = async (id: string) => {
    return result;
 };
 
-// TODO: Delete api is pending
 const deleteUserById = async (id: string) => {
-   const result = await User.findOneAndDelete({ _id: id });
+   const [result] = await db.delete(users).where(eq(users.id, id)).returning();
 
    if (!result) {
       throw new AppError(httpStatus.NOT_FOUND, "User not found");

@@ -1,17 +1,25 @@
 import httpStatus from "http-status";
-import type { PipelineStage } from "mongoose";
 import type {
    TCreateCollectionPayloadType,
    TUpdateCollectionPayloadType,
    TGetAllCollectionQueryParamsType,
 } from "./collection.validations";
 import { AppError, BadRequest, ConflictError } from "../../errors";
-import { Collection } from "./collection.model";
+import { db } from "@/app/db";
+import { collections, type IUser } from "@/app/db/schemas";
 import {
-   collectionSearchableFields,
-   collectionSortableFields,
-} from "./collection.constants";
-import type { IUserDoc } from "../User";
+   eq,
+   ne,
+   and,
+   or,
+   ilike,
+   gte,
+   lte,
+   asc,
+   desc,
+   count,
+   SQL,
+} from "drizzle-orm";
 import { createSlug, formatQuery, logger } from "@/app/utils";
 import type { TMulterFile } from "@/app/interfaces/multer.types";
 import uploadFileIntoCloudinary from "@/app/utils/cloudinary/upload-file";
@@ -20,7 +28,7 @@ import { deleteFileByUrl } from "@/app/utils/cloudinary/delete-file";
 
 // 1. CREATE COLLECTION
 const createCollection = async (
-   user: IUserDoc,
+   user: IUser,
    payload: TCreateCollectionPayloadType,
    icon: TMulterFile,
 ) => {
@@ -29,35 +37,36 @@ const createCollection = async (
    // ?? Generate slug:
    const slug = createSlug(name);
 
-   // ?? Find any collection exists with same name?:
-
-   const collection = await Collection.findOne({
-      slug,
+   // ?? Check if collection with same slug exists:
+   const existing = await db.query.collections.findFirst({
+      where: { slug },
    });
 
-   if (collection) {
+   if (existing) {
       throw new ConflictError("Collection with the same name already exists.");
    }
 
-   // ?? Upload the collection icon image:
+   // ?? Upload icon image:
    let iconUrl: string | null = null;
    if (icon) {
       const uploadedFile = await uploadFileIntoCloudinary(
          icon,
          File_FOLDER_NAME.ICON,
       );
-
       iconUrl = uploadedFile?.url as string;
    }
 
    try {
-      const result = await Collection.create({
-         name,
-         slug,
-         icon: iconUrl,
-         author: user._id,
-         isActive: true,
-      });
+      const [result] = await db
+         .insert(collections)
+         .values({
+            name,
+            slug,
+            icon: iconUrl,
+            authorId: user.id,
+            isActive: true,
+         })
+         .returning();
 
       return result;
    } catch (error) {
@@ -66,7 +75,6 @@ const createCollection = async (
             logger.error("Failed to delete uploaded collection icon", error),
          );
       }
-
       throw error;
    }
 };
@@ -77,22 +85,22 @@ const updateCollection = async (
    payload: TUpdateCollectionPayloadType,
    iconFile: TMulterFile,
 ) => {
-   // ?? Check is collection already exists ?:
-   const existingCollection = await Collection.findById(id);
+   const existingCollection = await db.query.collections.findFirst({
+      where: { id },
+   });
+
    if (!existingCollection) {
       throw new BadRequest("Collection not found.");
    }
 
-   // ?? Check is name changed ?
+   const updateData: Partial<typeof collections.$inferInsert> = {};
+
    if (payload.name) {
       const slug = createSlug(payload.name);
 
-      // Check is any collection exists with this slug?:
-      const duplicateSlug = await Collection.findOne({
-         _id: {
-            $ne: existingCollection?._id,
-         },
-         slug,
+      // Check for duplicate slug (exclude current)
+      const duplicateSlug = await db.query.collections.findFirst({
+         where: { id: { ne: id }, slug },
       });
 
       if (duplicateSlug) {
@@ -100,33 +108,41 @@ const updateCollection = async (
             "Collection with the same name already exists.",
          );
       }
-      existingCollection.name = payload.name;
-      existingCollection.slug = slug;
+
+      updateData.name = payload.name;
+      updateData.slug = slug;
    }
 
-   if (payload.isActive !== undefined)
-      existingCollection.isActive = payload.isActive;
+   if (payload.isActive !== undefined) {
+      updateData.isActive = payload.isActive;
+   }
 
-   //  Check is any file is there :
    let newUrl: string | null = null;
-   const oldUrl = existingCollection?.icon as string;
+   const oldUrl = existingCollection?.icon as string | null;
+
    if (iconFile) {
       const uploadedFile = await uploadFileIntoCloudinary(
          iconFile,
          File_FOLDER_NAME.ICON,
       );
-
       newUrl = uploadedFile?.url as string;
+      updateData.icon = newUrl;
    }
 
    try {
-      await existingCollection.save({ validateBeforeSave: true });
+      const [updated] = await db
+         .update(collections)
+         .set(updateData)
+         .where(eq(collections.id, id))
+         .returning();
 
       if (newUrl && oldUrl) {
          deleteFileByUrl(oldUrl).catch((err) =>
             logger.error("Failed to delete old url ", err.message),
          );
       }
+
+      return updated;
    } catch (error) {
       if (newUrl) {
          deleteFileByUrl(newUrl).catch((err) =>
@@ -135,8 +151,6 @@ const updateCollection = async (
       }
       throw error;
    }
-
-   return existingCollection;
 };
 
 // 3. GET ALL COLLECTION
@@ -150,41 +164,47 @@ const getAllCollection = async (query: TGetAllCollectionQueryParamsType) => {
       sortBy,
       fromDate,
       toDate,
-   } = formatQuery(query, collectionSortableFields);
+   } = formatQuery(query, ["createdAt", "updatedAt", "name"]);
 
-   const pipeline: PipelineStage[] = [];
+   const conditions: (SQL | undefined)[] = [];
 
-   if (fromDate || toDate) {
-      const dateFilter: Record<string, unknown> = {};
-      if (fromDate) dateFilter.$gte = new Date(fromDate);
-      if (toDate) dateFilter.$lte = new Date(toDate);
-
-      pipeline.push({ $match: { createdAt: dateFilter } });
-   }
+   if (fromDate)
+      conditions.push(gte(collections.createdAt, new Date(fromDate)));
+   if (toDate) conditions.push(lte(collections.createdAt, new Date(toDate)));
 
    if (searchTerm) {
-      pipeline.push({
-         $match: {
-            $or: collectionSearchableFields.map((field) => ({
-               [field]: { $regex: searchTerm, $options: "i" },
-            })),
-         },
-      });
+      conditions.push(
+         or(
+            ilike(collections.name, `%${searchTerm}%`),
+            ilike(collections.slug, `%${searchTerm}%`),
+         ),
+      );
    }
 
-   pipeline.push({ $sort: { [sortBy]: sortOrder } });
+   const whereClause =
+      conditions.length > 0
+         ? and(...(conditions.filter(Boolean) as SQL[]))
+         : undefined;
+   const direction: "asc" | "desc" = sortOrder === 1 ? "asc" : "desc";
 
-   pipeline.push({
-      $facet: {
-         data: [{ $skip: skip }, { $limit: limit }],
-         meta: [{ $count: "total" }],
-      },
-   });
+   const orderBy =
+      sortBy === "name"
+         ? { name: direction }
+         : sortBy === "updatedAt"
+           ? { updatedAt: direction }
+           : { createdAt: direction };
 
-   const aggregated = await Collection.aggregate(pipeline);
+   const [data, [countResult]] = await Promise.all([
+      db.query.collections.findMany({
+         where: whereClause ? { RAW: whereClause } : undefined,
+         orderBy,
+         limit,
+         offset: skip,
+      }),
+      db.select({ total: count() }).from(collections).where(whereClause),
+   ]);
 
-   const data = aggregated?.[0]?.data || [];
-   const total = aggregated?.[0]?.meta?.[0]?.total || 0;
+   const total = countResult?.total ?? 0;
 
    return {
       data,
@@ -199,7 +219,9 @@ const getAllCollection = async (query: TGetAllCollectionQueryParamsType) => {
 
 // 4. GET COLLECTION BY ID
 const getCollectionById = async (id: string) => {
-   const result = await Collection.findById(id);
+   const result = await db.query.collections.findFirst({
+      where: { id },
+   });
 
    if (!result) {
       throw new AppError(httpStatus.NOT_FOUND, "Collection not found");
@@ -210,7 +232,10 @@ const getCollectionById = async (id: string) => {
 
 // 5. DELETE COLLECTION BY ID
 const deleteCollectionById = async (id: string) => {
-   const result = await Collection.findOneAndDelete({ _id: id });
+   const [result] = await db
+      .delete(collections)
+      .where(eq(collections.id, id))
+      .returning();
 
    if (!result) {
       throw new AppError(httpStatus.NOT_FOUND, "Collection not found");

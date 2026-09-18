@@ -1,11 +1,6 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import mongoose from "mongoose";
+import { testDbConnection } from "@/app/db";
 
-export const connectDB = async (uri: string) => {
-   try {
-      await mongoose.connect(uri);
-      console.info("✅ Database connected  successfully!");
-   } catch (err: unknown) {
-      console.log(`Database connection failed!`, err);
-   }
+export const connectDB = async (_uri: string) => {
+   await testDbConnection();
+   console.info("✅ Neon DB (Drizzle ORM) connected successfully!")
 };

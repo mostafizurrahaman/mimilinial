@@ -27,18 +27,21 @@ import {
    verifyToken,
 } from "@/app/utils";
 import { configs } from "@/app/configs";
-import mongoose from "mongoose";
 import {
    checkResendCoolDown,
    createOrReplaceOTP,
-   Otp,
+   createOrReplaceOTPTx,
    OtpTypes,
 } from "@/app/modules/Otp";
 import { deleteFileByUrl } from "@/app/utils/cloudinary/delete-file";
 import { sendEmail } from "@/app/utils/send-email";
 import type { IJwtUserPayload } from "@/app/interfaces";
 import moment from "moment";
-import { User, UserStatus, type IUserDoc } from "../User";
+import { UserStatus } from "../User";
+import { isJwtIssuedBeforePasswordChanged } from "../User/user.constants";
+import { db } from "@/app/db";
+import { users, otps } from "@/app/db/schemas";
+import { eq, and } from "drizzle-orm";
 
 /**
  * CREATE USER:
@@ -49,9 +52,9 @@ const createUser = async (
 ) => {
    const { email, name, phone, password } = payload;
 
-   // ?? Check with this email is any user exists?
-   const existingUser = await User.findOne({
-      email,
+   // ?? Check if email already in use:
+   const existingUser = await db.query.users.findFirst({
+      where: { email },
    });
 
    if (existingUser) {
@@ -60,10 +63,9 @@ const createUser = async (
             `This email already in use. Account status "${existingUser.status}"`,
          );
       } else {
-         // ?? Find the otp for this user :
-         const existingOTP = await Otp.findOne({
-            user: existingUser?._id,
-            type: OtpTypes.SIGNUP,
+         // ?? Find OTP for this user:
+         const existingOTP = await db.query.otps.findFirst({
+            where: { userId: existingUser.id, type: OtpTypes.SIGNUP },
          });
 
          // ?? Cooldown:
@@ -71,13 +73,10 @@ const createUser = async (
             checkResendCoolDown(existingOTP.lastSentAt);
          }
 
-         const otp = await createOrReplaceOTP(
-            existingUser?._id,
-            OtpTypes.SIGNUP,
-         );
+         const otp = await createOrReplaceOTP(existingUser.id, OtpTypes.SIGNUP);
 
          sendEmail(
-            existingUser?.email,
+            existingUser.email,
             "Your account verification OTP has been resent",
             `Your Account OTP is ${otp.otp}`,
             `<h1>Your Account OTP is ${otp.otp}</h1>`,
@@ -90,12 +89,12 @@ const createUser = async (
       }
    }
 
-   // ?? Check this phone number already in use?:
-   const associatedUserWithPhone = await User.findOne({
-      phone,
+   // ?? Check phone already in use:
+   const existingPhone = await db.query.users.findFirst({
+      where: { phone },
    });
 
-   if (associatedUserWithPhone) {
+   if (existingPhone) {
       throw new AppError(
          httpStatus.BAD_REQUEST,
          "This phone number already in use.",
@@ -110,7 +109,7 @@ const createUser = async (
          profileImage,
          File_FOLDER_NAME.PROFILE_IMAGES,
       );
-      newProfileUrl = uploadedFile?.url!;
+      newProfileUrl = uploadedFile?.url as string;
    }
 
    // ?? Hash the password:
@@ -119,69 +118,59 @@ const createUser = async (
       configs.passwordSaltRound,
    );
 
-   // ?? mongoose Session :
-   const mongoSession = await mongoose.startSession();
-
    try {
-      mongoSession.startTransaction();
-
-      // ?? Create The user into db:
-      const [user] = await User.create(
-         [
-            {
+      // ?? Create user + OTP in a transaction:
+      const newUser = await db.transaction(async (tx) => {
+         const [user] = await tx
+            .insert(users)
+            .values({
                name,
                email,
                phone,
                password: hashedPassword,
-               profileImage: newProfileUrl!,
-               authProviders: ["email"],
-            },
-         ],
-         {
-            session: mongoSession,
-         },
-      );
+               profileImage: newProfileUrl,
+               authProvider: ["email"],
+               twoFactorBackupCodes: [],
+            })
+            .returning();
 
-      if (!user) {
-         throw new AppError(httpStatus.BAD_REQUEST, "Failed to create user.");
-      }
+         if (!user) {
+            throw new AppError(
+               httpStatus.BAD_REQUEST,
+               "Failed to create user.",
+            );
+         }
 
-      // ?? Create OTP:
-      const otp = await createOrReplaceOTP(
-         user?._id,
-         OtpTypes.SIGNUP,
-         mongoSession,
-      );
+         // ?? Create OTP:
+         const otp = await createOrReplaceOTPTx(tx, user.id, OtpTypes.SIGNUP);
 
-      if (!otp) {
-         throw new AppError(httpStatus.BAD_REQUEST, "Failed to save otp");
-      }
+         if (!otp) {
+            throw new AppError(httpStatus.BAD_REQUEST, "Failed to save otp");
+         }
 
-      await mongoSession.commitTransaction();
+         sendEmail(
+            user.email,
+            "Your account verification OTP has been sent",
+            `Your Account OTP is ${otp.otp}`,
+            `<h1>Your Account OTP is ${otp.otp}</h1>`,
+            configs.nodeMailer.replyTo,
+         );
 
-      sendEmail(
-         user?.email,
-         "Your account verification OTP has been sent",
-         `Your Account OTP is ${otp.otp}`,
-         `<h1>Your Account OTP is ${otp.otp}</h1>`,
-         configs.nodeMailer.replyTo,
-      );
+         return user;
+      });
 
       return {
          message: "Your account created successfully. Verify your account.",
-         userId: user?._id,
-         email: user.email,
-         role: user.role,
-         status: user.status,
+         userId: newUser.id,
+         email: newUser.email,
+         role: newUser.role,
+         status: newUser.status,
       };
    } catch (error) {
       if (newProfileUrl) {
          deleteFileByUrl(newProfileUrl).catch((err) => console.log(err));
       }
-      await mongoSession.abortTransaction();
       throw error;
-   } finally {
-      await mongoSession.endSession();
    }
 };
 
@@ -191,46 +180,39 @@ const createUser = async (
 const resendSignupOTP = async (payload: TResendSignupOTPPayloadType) => {
    const { email } = payload;
 
-   // ?? Find User with email:
-   const user = await User.findOne({
-      email,
+   const user = await db.query.users.findFirst({
+      where: { email },
    });
    if (!user) {
       throw new NotFoundError("User not found.");
    }
 
-   // ?? Check  is OTP already verified:
    if (user.isOtpVerified) {
       throw new BadRequest("You account has already been verified.");
    }
 
-   // ?? Check NOT
    if (user.status !== UserStatus.PENDING) {
       throw new BadRequest(
          `You account is not pending, current status "${user.status}".`,
       );
    }
 
-   // ?? Find OTP:
-   const otp = await Otp.findOne({
-      user: user?._id,
-      type: OtpTypes.SIGNUP,
+   const otp = await db.query.otps.findFirst({
+      where: { userId: user.id, type: OtpTypes.SIGNUP },
    });
 
-   // ?? Check  Cooldown period:
    if (otp) {
       checkResendCoolDown(otp.lastSentAt);
    }
 
-   // ?? Generate a new OTP:
-   const newOtp = await createOrReplaceOTP(user?._id, OtpTypes.SIGNUP);
+   const newOtp = await createOrReplaceOTP(user.id, OtpTypes.SIGNUP);
 
    if (!newOtp) {
       throw new BadRequest("Failed to generate new OTP.");
    }
 
    sendEmail(
-      user?.email,
+      user.email,
       "Your account verification OTP has been resent",
       `Your Account OTP is ${newOtp.otp}`,
       `<h1>Your Account OTP is ${newOtp.otp}</h1>`,
@@ -244,30 +226,25 @@ const resendSignupOTP = async (payload: TResendSignupOTPPayloadType) => {
 const verifySignupOTP = async (payload: TVerifySignupOTPPayloadType) => {
    const { email, otp } = payload;
 
-   // ?? Find User with email:
-   const user = await User.findOne({
-      email,
+   const user = await db.query.users.findFirst({
+      where: { email },
    });
    if (!user) {
       throw new NotFoundError("User not found.");
    }
 
-   // ?? Check  is OTP already verified:
    if (user.isOtpVerified) {
       throw new BadRequest("You account has already been verified.");
    }
 
-   // ?? Check NOT
    if (user.status !== UserStatus.PENDING) {
       throw new BadRequest(
          `You account is not pending, current status "${user.status}".`,
       );
    }
 
-   // ?? Find OTP:
-   const existingOTP = await Otp.findOne({
-      user: user?._id,
-      type: OtpTypes.SIGNUP,
+   const existingOTP = await db.query.otps.findFirst({
+      where: { userId: user.id, type: OtpTypes.SIGNUP },
    });
 
    if (!existingOTP) {
@@ -278,36 +255,28 @@ const verifySignupOTP = async (payload: TVerifySignupOTPPayloadType) => {
       throw new BadRequest("OTP has been expired.");
    }
 
-   // ?? Is OTP Matched?:
    const isOtpMatched = await comparePassword(otp, existingOTP.otpHash);
    if (!isOtpMatched) {
       throw new BadRequest("Invalid OTP");
    }
 
-   const mongoSession = await mongoose.startSession();
+   await db.transaction(async (tx) => {
+      await tx
+         .update(users)
+         .set({ isOtpVerified: true, status: "active" })
+         .where(eq(users.id, user.id));
 
-   try {
-      mongoSession.startTransaction();
-      user.isOtpVerified = true;
-      user.status = UserStatus.ACTIVE;
+      await tx
+         .delete(otps)
+         .where(
+            and(
+               eq(otps.userId, user.id),
+               eq(otps.otpHash, existingOTP.otpHash),
+            ),
+         );
+   });
 
-      await user.save({
-         session: mongoSession,
-      });
-
-      await Otp.findOneAndDelete({
-         user: user?._id,
-         otpHash: existingOTP.otpHash,
-      });
-
-      await mongoSession.commitTransaction();
-      return null;
-   } catch (error) {
-      await mongoSession.abortTransaction();
-      throw error;
-   } finally {
-      await mongoSession.endSession();
-   }
+   return null;
 };
 
 /**
@@ -316,57 +285,50 @@ const verifySignupOTP = async (payload: TVerifySignupOTPPayloadType) => {
 const login = async (payload: TLoginPayloadType) => {
    const { email, password } = payload;
 
-   // ?? Find User with email:
-   const user = await User.findOne({
-      email,
-   }).select("+password");
+   const user = await db.query.users.findFirst({
+      where: { email },
+   });
    if (!user) {
       throw new NotFoundError("User not found.");
    }
 
-   //  TODO: To check roles Allowed or not:
-
-   // ?? Check  is OTP already verified:
    if (!user.isOtpVerified) {
       throw new BadRequest(
          "Your account is not verified yet. Please verify with signup OTP.",
       );
    }
 
-   // ?? Check is account still pending?:
    if (user.status === UserStatus.PENDING) {
       throw new ForbiddenError(
          `Your account is Pending yet. Please verify OTP.`,
       );
    }
 
-   // ?? Check is account blocked:
    if (user.status === UserStatus.BLOCKED) {
       throw new ForbiddenError(`Your account is blocked.`);
    }
 
-   // ?? Check is account deleted ?:
    if (user.status === UserStatus.DELETED) {
       throw new ForbiddenError("You account has been deleted.");
    }
 
-   // ?? Verify is password matched:
-   const isPasswordMatched = await comparePassword(password, user.password);
+   const isPasswordMatched = await comparePassword(
+      password,
+      user.password ?? "",
+   );
    if (!isPasswordMatched) {
       throw new BadRequest("Credential not matched.");
    }
 
-   //  ?? Prepare token payload
    const tokenPayload: IJwtUserPayload = {
-      _id: user?._id?.toString(),
-      email: user?.email,
-      name: user?.name,
-      profileImage: user?.profileImage!,
-      status: user?.status,
-      role: user?.role,
+      _id: user.id,
+      email: user.email,
+      name: user.name,
+      profileImage: user.profileImage ?? "",
+      status: user.status ?? "pending",
+      role: user.role ?? "user",
    };
 
-   // ?? Generate JWT Token:
    const accessToken = createToken(
       tokenPayload,
       configs.jwt.accessToken.secret,
@@ -382,9 +344,9 @@ const login = async (payload: TLoginPayloadType) => {
    return {
       accessToken,
       refreshToken,
-      email: user?.email,
-      role: user?.role,
-      status: user?.status,
+      email: user.email,
+      role: user.role,
+      status: user.status,
    };
 };
 
@@ -394,61 +356,52 @@ const login = async (payload: TLoginPayloadType) => {
 const forgotPassword = async (payload: TForgotPasswordPayloadType) => {
    const { email } = payload;
 
-   // ?? Find User with email:
-   const user = await User.findOne({
-      email,
+   const user = await db.query.users.findFirst({
+      where: { email },
    });
 
    if (!user) {
       throw new NotFoundError("User not found.");
    }
 
-   // ?? Check  is OTP already verified:
    if (!user.isOtpVerified) {
       throw new BadRequest(
          "Your account is not verified yet. Please verify with signup OTP.",
       );
    }
 
-   // ?? Check is account still pending?:
    if (user.status === UserStatus.PENDING) {
       throw new ForbiddenError(
          `Your account is Pending yet. Please verify your account.`,
       );
    }
 
-   // ?? Check is account blocked:
    if (user.status === UserStatus.BLOCKED) {
       throw new ForbiddenError(`Your account is blocked.`);
    }
 
-   // ?? Check is account deleted ?:
    if (user.status === UserStatus.DELETED) {
       throw new ForbiddenError("You account has been deleted.");
    }
 
-   // ?? Check is account active ?:
    if (user.status !== UserStatus.ACTIVE) {
       throw new ForbiddenError("You account is not active yet.");
    }
 
-   //  ?? Has any existing OTP?:
-   const otp = await Otp.findOne({
-      user: user?._id,
-      type: OtpTypes.RESET,
+   const otp = await db.query.otps.findFirst({
+      where: { userId: user.id, type: OtpTypes.RESET },
    });
 
    if (otp) {
       checkResendCoolDown(otp.lastSentAt);
    }
 
-   // ?? Generate a new OTP:
-   const newOTP = await createOrReplaceOTP(user?._id, OtpTypes.RESET);
+   const newOTP = await createOrReplaceOTP(user.id, OtpTypes.RESET);
 
    sendEmail(
-      user?.email,
+      user.email,
       "Your Password Reset OTP",
-      `Your password reset OTP is ${newOTP.otp}. This OTP will expire shortly. If you did not request a password reset, please ignore this email.`,
+      `Your password reset OTP is ${newOTP.otp}. This OTP will expire shortly.`,
       `<h1>Password Reset OTP</h1>
    <p>Your password reset OTP is:</p>
    <h2>${newOTP.otp}</h2>
@@ -465,53 +418,45 @@ const forgotPassword = async (payload: TForgotPasswordPayloadType) => {
 };
 
 /**
- * Forgot password
+ * Verify Reset Password OTP
  */
 const verifyResetPasswordOTP = async (payload: TVerifySignupOTPPayloadType) => {
    const { email, otp } = payload;
 
-   // ?? Find User with email:
-   const user = await User.findOne({
-      email,
+   const user = await db.query.users.findFirst({
+      where: { email },
    });
 
    if (!user) {
       throw new NotFoundError("User not found.");
    }
 
-   // ?? Check  is OTP already verified:
    if (!user.isOtpVerified) {
       throw new BadRequest(
          "Your account is not verified yet. Please verify with signup OTP.",
       );
    }
 
-   // ?? Check is account still pending?:
    if (user.status === UserStatus.PENDING) {
       throw new ForbiddenError(
          `Your account is Pending yet. Please verify your account.`,
       );
    }
 
-   // ?? Check is account blocked:
    if (user.status === UserStatus.BLOCKED) {
       throw new ForbiddenError(`Your account is blocked.`);
    }
 
-   // ?? Check is account deleted ?:
    if (user.status === UserStatus.DELETED) {
       throw new ForbiddenError("You account has been deleted.");
    }
 
-   // ?? Check is account active ?:
    if (user.status !== UserStatus.ACTIVE) {
       throw new ForbiddenError("You account is not active yet.");
    }
 
-   //  ?? Has any existing OTP?:
-   const existingOTP = await Otp.findOne({
-      user: user?._id,
-      type: OtpTypes.RESET,
+   const existingOTP = await db.query.otps.findFirst({
+      where: { userId: user.id, type: OtpTypes.RESET },
    });
 
    if (!existingOTP) {
@@ -522,105 +467,99 @@ const verifyResetPasswordOTP = async (payload: TVerifySignupOTPPayloadType) => {
       throw new BadRequest("OTP has been expired.");
    }
 
-   // ?? Check is OTP matched:
    const isOtpMatched = await comparePassword(otp, existingOTP?.otpHash);
    if (!isOtpMatched) {
       throw new BadRequest("Invalid OTP.");
    }
 
-   // ?? Reset Password Token Payload:
+   await db
+      .delete(otps)
+      .where(
+         and(eq(otps.userId, user.id), eq(otps.otpHash, existingOTP.otpHash)),
+      );
+
    const resetPasswordTokenPayload: IJwtUserPayload = {
-      _id: user?._id?.toString(),
-      email: user?.email,
-      name: user?.name,
-      profileImage: user?.profileImage!,
-      status: user?.status,
-      role: user?.role,
+      _id: user.id,
+      email: user.email,
+      name: user.name,
+      profileImage: user.profileImage ?? "",
+      status: user.status ?? "pending",
+      role: user.role ?? "user",
    };
 
-   await Otp.deleteOne({
-      user: user?._id,
-      otpHash: existingOTP.otpHash,
-   });
-
-   // ?? Generate Reset password Token:
    const token = createToken(
       resetPasswordTokenPayload,
       configs.jwt.resetToken.secret,
       configs.jwt.resetToken.expiresIn,
    );
 
-   return {
-      token,
-   };
+   return { token };
 };
 
 /**
  * Reset Password:
  */
-
 const resetPassword = async (payload: TResetPasswordPayloadType) => {
    const { token, password } = payload;
 
-   // ?? Valid the token :
    const decode = verifyToken(token, configs.jwt.resetToken.secret);
    if (!decode.email) {
       throw new ForbiddenError("Invalid reset token.");
    }
 
-   //  ?? Find user with this  email:
-   const user = await User.findOne({
-      email: decode.email,
+   const user = await db.query.users.findFirst({
+      where: { email: decode.email },
    });
 
    if (!user) {
       throw new NotFoundError("User not found.");
    }
 
-   // ?? Check  is OTP already verified:
    if (!user.isOtpVerified) {
       throw new BadRequest(
          "Your account is not verified yet. Please verify with signup OTP.",
       );
    }
 
-   // ?? Check is account still pending?:
    if (user.status === UserStatus.PENDING) {
       throw new ForbiddenError(
          `Your account is Pending yet. Please verify your account.`,
       );
    }
 
-   // ?? Check is account blocked:
    if (user.status === UserStatus.BLOCKED) {
       throw new ForbiddenError(`Your account is blocked.`);
    }
 
-   // ?? Check is account deleted ?:
    if (user.status === UserStatus.DELETED) {
       throw new ForbiddenError("You account has been deleted.");
    }
 
-   // ?? Check is account active ?:
    if (user.status !== UserStatus.ACTIVE) {
       throw new ForbiddenError("You account is not active yet.");
    }
 
-   // ?? Is jwt issued before password changed ?:
-   if (user.isJwtIssuedBeforePasswordChanged(decode.iat as number)) {
+   if (
+      isJwtIssuedBeforePasswordChanged(
+         user.passwordChangedAt,
+         decode.iat as number,
+      )
+   ) {
       throw new UnauthorizedError("Token is expired. Please login");
    }
 
-   // ?? Hash password:
    const hashedPassword = await hashPassword(
       password,
       configs.passwordSaltRound,
    );
 
-   user.password = hashedPassword;
-   user.passwordChangedAt = new Date();
-
-   await user.save();
+   await db
+      .update(users)
+      .set({
+         password: hashedPassword,
+         passwordChangedAt: moment().startOf("seconds").toDate(),
+      })
+      .where(eq(users.id, user.id));
 
    return null;
 };
@@ -628,41 +567,47 @@ const resetPassword = async (payload: TResetPasswordPayloadType) => {
 /**
  * Change password:
  */
-
 const changePassword = async (
-   user: IUserDoc,
+   currentUser: {
+      id: string;
+      password: string | null;
+      passwordChangedAt?: Date | null;
+   },
    payload: TChangePasswordPayload,
 ) => {
    const { newPassword, oldPassword } = payload;
 
-   // ?? Compare both password:
-   const isPasswordMatched = await comparePassword(oldPassword, user.password);
+   const isPasswordMatched = await comparePassword(
+      oldPassword,
+      currentUser.password ?? "",
+   );
    if (!isPasswordMatched) {
       throw new BadRequest("Credential not matched.");
    }
 
-   // ?? Hash password:
    const hashedPassword = await hashPassword(
       newPassword,
       configs.passwordSaltRound,
    );
 
-   user.password = hashedPassword;
-   user.passwordChangedAt = new Date();
+   const [updatedUser] = await db
+      .update(users)
+      .set({
+         password: hashedPassword,
+         passwordChangedAt: moment().startOf("second")?.toDate(),
+      })
+      .where(eq(users.id, currentUser.id))
+      .returning();
 
-   await user.save();
-
-   //  ?? Prepare token payload
    const tokenPayload: IJwtUserPayload = {
-      _id: user?._id?.toString(),
-      email: user?.email,
-      name: user?.name,
-      profileImage: user?.profileImage!,
-      status: user?.status,
-      role: user?.role,
+      _id: updatedUser!.id,
+      email: updatedUser!.email,
+      name: updatedUser!.name,
+      profileImage: updatedUser!.profileImage ?? "",
+      status: updatedUser!.status ?? "pending",
+      role: updatedUser!.role ?? "user",
    };
 
-   // ?? Generate JWT Token:
    const accessToken = createToken(
       tokenPayload,
       configs.jwt.accessToken.secret,
@@ -675,73 +620,71 @@ const changePassword = async (
       configs.jwt.refreshToken.expiresIn,
    );
 
-   return {
-      accessToken,
-      refreshToken,
-   };
+   return { accessToken, refreshToken };
 };
 
 /**
  * Refresh Token
  */
 const refreshToken = async (token: string) => {
-   // ?? Decode Token :
    const decoded = verifyToken(token, configs.jwt.refreshToken.secret);
    if (!decoded.email) {
       throw new UnauthorizedError("Invalid token");
    }
 
-   //  ?? Find user with email:
-   const user = await User.findById(decoded?._id);
+   const user = await db.query.users.findFirst({
+      where: { id: decoded._id },
+   });
+
    if (!user) {
       throw new UnauthorizedError("User not found.");
    }
 
-   //  ?? Otp verification :
    if (!user.isOtpVerified) {
       throw new UnauthorizedError(
          "Your account is not verified yet. Please verify your account.",
       );
    }
 
-   // ?? Check is account still pending?:
    if (user.status === UserStatus.PENDING) {
       throw new ForbiddenError(
          `Your account is Pending yet. Please verify your account.`,
       );
    }
 
-   // ?? Check is account blocked:
    if (user.status === UserStatus.BLOCKED) {
       throw new ForbiddenError(`Your account is blocked.`);
    }
 
-   // ?? Check is account deleted ?:
    if (user.status === UserStatus.DELETED) {
       throw new ForbiddenError("You account has been deleted.");
    }
 
-   // ?? Check is account active ?:
    if (user.status !== UserStatus.ACTIVE) {
       throw new ForbiddenError("You account is not active yet.");
    }
 
-   // ?? Is Refresh token
-   if (user.isJwtIssuedBeforePasswordChanged(decoded.iat as number)) {
+   console.log("User password changed at:", user.passwordChangedAt);
+   console.log("JWT Issued at:", decoded.iat);
+
+   if (
+      isJwtIssuedBeforePasswordChanged(
+         user.passwordChangedAt,
+         decoded.iat as number,
+      )
+   ) {
       throw new UnauthorizedError("You are not authorized.");
    }
 
-   //  ?? Prepare token payload
    const tokenPayload: IJwtUserPayload = {
-      _id: user?._id?.toString(),
-      email: user?.email,
-      name: user?.name,
-      profileImage: user?.profileImage!,
-      status: user?.status,
-      role: user?.role,
+      _id: user.id,
+      email: user.email,
+      name: user.name,
+      profileImage: user.profileImage ?? "",
+      status: user.status ?? "pending",
+      role: user.role ?? "user",
    };
 
-   // ?? Generate JWT Token:
    const accessToken = createToken(
       tokenPayload,
       configs.jwt.accessToken.secret,
@@ -754,10 +697,7 @@ const refreshToken = async (token: string) => {
       configs.jwt.refreshToken.expiresIn,
    );
 
-   return {
-      accessToken,
-      refreshToken,
-   };
+   return { accessToken, refreshToken };
 };
 
 export const authServices = {

@@ -1,6 +1,6 @@
 import { z, ZodIssueCode } from "zod";
 
-import mongoose from "mongoose";
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 import { URL_REGEX } from "@/app/constants/regex";
 
 /**
@@ -156,10 +156,13 @@ export const requiredMongooseId = (fieldName = "Field") => {
       .min(1, { message: `${fieldName} cannot be empty` })
       .refine(
          (val) => {
-            return mongoose.isValidObjectId(val);
+            return UUID_REGEX.test(val);
          },
          {
-            error: () => "Invalid mongoose ID!",
+            message: "Invalid UUID!",
          },
       );
 };
+
+// Alias for backward compatibility
+export const requiredUuid = requiredMongooseId;

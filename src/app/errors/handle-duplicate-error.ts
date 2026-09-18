@@ -1,13 +1,11 @@
-import mongoose from "mongoose";
-
 import httpStatus from "http-status";
 import type { IErrorSources, ISendErrorResponse } from "@/app/interfaces";
 
 export const handleValidationError = (
-  err: mongoose.Error.ValidationError,
+  err: { errors: Record<string, { path: string; message: string }> },
 ): ISendErrorResponse => {
   const errorSources: IErrorSources[] = Object.values(err.errors).map(
-    (val: mongoose.Error.ValidatorError | mongoose.Error.CastError) => {
+    (val: { path: string; message: string }) => {
       return {
         path: val.path,
         message: val.message,

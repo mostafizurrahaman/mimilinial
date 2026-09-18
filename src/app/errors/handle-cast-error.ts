@@ -1,10 +1,8 @@
-import mongoose from "mongoose";
-
 import httpStatus from "http-status";
 import type { IErrorSources, ISendErrorResponse } from "@/app/interfaces";
 
 export const handleCastError = (
-  err: mongoose.Error.CastError,
+  err: { path: string; message: string },
 ): ISendErrorResponse => {
   const errorSources: IErrorSources[] = [
     {

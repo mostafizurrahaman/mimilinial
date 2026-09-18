@@ -40,11 +40,11 @@ const envSchema = z.object({
   RESET_TOKEN_SECRET: z.string().min(10),
   RESET_TOKEN_EXPIRES: z.string(),
 
-  // AWS
-  AWS_ACCESS_KEY_ID: z.string(),
-  AWS_SECRET_ACCESS_KEY: z.string(),
-  AWS_REGION: z.string(),
-  AWS_S3_BUCKET_NAME: z.string(),
+  // AWS (optional - not required for local dev)
+  AWS_ACCESS_KEY_ID: z.string().optional().default(""),
+  AWS_SECRET_ACCESS_KEY: z.string().optional().default(""),
+  AWS_REGION: z.string().optional().default(""),
+  AWS_S3_BUCKET_NAME: z.string().optional().default(""),
 
   // Admin & OTP
   SUPER_ADMIN_PASSWORD: z.string(),
