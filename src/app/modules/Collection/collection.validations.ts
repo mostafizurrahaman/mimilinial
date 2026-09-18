@@ -5,6 +5,7 @@ import {
    optionalEnumString,
    optionalString,
    optionalDate,
+   requiredStrBoolean,
 } from "../../utils";
 import { collectionSortableFields } from "./collection.constants";
 import { sortOrderValues } from "../../constants";
@@ -21,7 +22,10 @@ const updateCollectionSchema = z.object({
    params: z.object({
       id: requiredString("ID"),
    }),
-   body: z.object({}),
+   body: z.object({
+      name: requiredString("Name"),
+      isActive: requiredStrBoolean("isActive"),
+   }),
 });
 
 // 3. GET ALL COLLECTION

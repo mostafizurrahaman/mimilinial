@@ -29,6 +29,10 @@ router.post(
 // 2. UPDATE COLLECTION
 router.patch(
    "/:id",
+   multerFactory({
+      allowedExtensions: ["jpeg", "jpeg", "webp", "png"],
+      maxSizeInMB: 5,
+   }).single("icon"),
    validateRequest(collectionValidations.updateCollectionSchema),
    collectionControllers.updateCollection,
 );
