@@ -28,6 +28,8 @@ export const authProviderEnum = pgEnum("auth_provider", [
    "github",
 ]);
 
+export const userRoles = UserRoleEnum.enumValues;
+
 export const users = pgTable("user", {
    id: uuid("id").defaultRandom().primaryKey(),
    name: varchar("name", {
@@ -56,7 +58,10 @@ export const users = pgTable("user", {
       .default(false)
       .notNull(),
    twoFactorSecret: text("two_factor_secret"),
-   twoFactorBackupCodes: text("two_factor_backup_codes").array().notNull(),
+   twoFactorBackupCodes: text("two_factor_backup_codes")
+      .array()
+      .notNull()
+      .default([]),
    blockedReason: text("blocked_reason"),
    deletionReason: text("deletion_reason"),
    blockedAt: timestamp("blocked_at", { precision: 6, withTimezone: true }),

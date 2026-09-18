@@ -168,10 +168,12 @@ const getAllCollection = async (query: TGetAllCollectionQueryParamsType) => {
 
    const conditions: (SQL | undefined)[] = [];
 
+   // Date filters:
    if (fromDate)
       conditions.push(gte(collections.createdAt, new Date(fromDate)));
    if (toDate) conditions.push(lte(collections.createdAt, new Date(toDate)));
 
+   // Searching:
    if (searchTerm) {
       conditions.push(
          or(
@@ -193,6 +195,8 @@ const getAllCollection = async (query: TGetAllCollectionQueryParamsType) => {
          : sortBy === "updatedAt"
            ? { updatedAt: direction }
            : { createdAt: direction };
+
+   console.log(whereClause);
 
    const [data, [countResult]] = await Promise.all([
       db.query.collections.findMany({
