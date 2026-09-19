@@ -18,6 +18,7 @@ import uploadFileIntoCloudinary from "@/app/utils/cloudinary/upload-file";
 import { File_FOLDER_NAME } from "@/app/constants/folder_name";
 import { deleteFileByUrl } from "@/app/utils/cloudinary/delete-file";
 import type { ICollectionFiles } from "./collection.interfaces";
+import { deleteFilesByUrls } from "@/app/utils/cloudinary/delete-files";
 
 // 1. CREATE COLLECTION
 const createCollection = async (
@@ -173,17 +174,9 @@ const updateCollection = async (
    try {
       await existingCollection.save({ validateBeforeSave: true });
 
-      if (oldUrls?.length > 0) {
-         Promise.all(oldUrls.map((url) => deleteFileByUrl(url))).catch((err) =>
-            console.log("Failed to upload", err),
-         );
-      }
+      deleteFilesByUrls(oldUrls);
    } catch (error) {
-      if (newUrls?.length > 0) {
-         Promise.all(oldUrls.map((url) => deleteFileByUrl(url))).catch((err) =>
-            console.log("Failed to upload", err),
-         );
-      }
+      deleteFilesByUrls(newUrls);
       throw error;
    }
 
