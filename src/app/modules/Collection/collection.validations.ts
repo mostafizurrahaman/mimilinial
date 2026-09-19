@@ -16,6 +16,8 @@ const createCollectionSchema = z.object({
    body: z.object({
       name: requiredString("Name"),
       description: optionalString("Description").nullish(),
+      metaTitle: optionalString("Meta title"),
+      metaDescription: optionalString("Meta description"),
    }),
 });
 
@@ -28,6 +30,8 @@ const updateCollectionSchema = z.object({
       name: requiredString("Name"),
       isActive: requiredStrBoolean("isActive").optional(),
       description: optionalString("Description").nullish(),
+      metaTitle: optionalString("Meta title"),
+      metaDescription: optionalString("Meta description"),
    }),
 });
 

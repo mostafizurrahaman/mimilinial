@@ -2,15 +2,16 @@ import httpStatus from "http-status";
 import { collectionServices } from "./collection.services";
 import { sendResponse, catchAsync, getUserFromRequest } from "../../utils";
 import type { TMulterFile } from "@/app/interfaces/multer.types";
+import type { ICollectionFiles } from "./collection.interfaces";
 
 // 1. CREATE COLLECTION
 const createCollection = catchAsync(async (req, res) => {
    const user = await getUserFromRequest(req);
-   const icon = req.file as TMulterFile;
+   const files = req.files as unknown as ICollectionFiles;
    const result = await collectionServices.createCollection(
       user,
       req.body,
-      icon,
+      files,
    );
 
    sendResponse(res, {
@@ -22,11 +23,11 @@ const createCollection = catchAsync(async (req, res) => {
 
 // 2. UPDATE COLLECTION
 const updateCollection = catchAsync(async (req, res) => {
-   const icon = req.file as TMulterFile;
+   const files = req.files as unknown as ICollectionFiles;
    const result = await collectionServices.updateCollection(
       req.params.id as string,
       req.body,
-      icon,
+      files,
    );
 
    sendResponse(res, {

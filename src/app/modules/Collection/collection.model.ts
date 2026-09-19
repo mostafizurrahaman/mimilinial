@@ -29,6 +29,17 @@ const collectionSchema = new Schema<ICollectionDoc>(
          type: String,
          allowNull: true,
       },
+      metaTitle: {
+         type: String,
+         maxLength: 60,
+      },
+      metaDescription: {
+         type: String,
+         maxLength: 160,
+      },
+      ogImage: {
+         type: String,
+      },
    },
    {
       timestamps: true,
