@@ -10,29 +10,29 @@ const router: Router = express.Router();
 router.get("/me", auth(), userControllers.getMe);
 
 router.patch(
-   "/:id/status",
-   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
-   validateRequest(userValidations.updateUserSchema),
-   userControllers.updateUserStatus,
+  "/:id/status",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(userValidations.updateUserSchema),
+  userControllers.updateUserStatus,
 );
 
 router.get(
-   "/all",
-   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
-   validateRequest(userValidations.getAllUserSchema),
-   userControllers.getAllUser,
+  "/all",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(userValidations.getAllUserSchema),
+  userControllers.getAllUser,
 );
 
 router.get(
-   "/:id",
-   validateRequest(userValidations.getUserByIdSchema),
-   userControllers.getUserById,
+  "/:id",
+  validateRequest(userValidations.getUserByIdSchema),
+  userControllers.getUserById,
 );
 
 router.delete(
-   "/:id",
-   validateRequest(userValidations.deleteUserByIdSchema),
-   userControllers.deleteUserById,
+  "/:id",
+  validateRequest(userValidations.deleteUserByIdSchema),
+  userControllers.deleteUserById,
 );
 
 export const userRoutes = router;
