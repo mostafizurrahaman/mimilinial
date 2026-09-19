@@ -18,7 +18,8 @@ const createTrack = async (
    user: IUserDoc,
    payload: TCreateTrackPayloadType,
 ) => {
-   const { category, name, description, isActive } = payload;
+   const { category, name, description, isActive, metaTitle, metaDescription } =
+      payload;
 
    // Check is category exists:
    const existingCategory = await Category.findById(category);
@@ -46,6 +47,8 @@ const createTrack = async (
       name,
       slug,
       description,
+      metaTitle,
+      metaDescription,
       isActive,
       author: user?._id,
    });
@@ -62,7 +65,8 @@ const updateTrack = async (id: string, payload: TUpdateTrackPayloadType) => {
       throw new NotFoundError("Track not found.");
    }
 
-   const { category, name, isActive, description } = payload;
+   const { category, name, isActive, description, metaTitle, metaDescription } =
+      payload;
 
    // Check is category changed and new category exists:
    let targetCategoryId = existingTrack.category;
@@ -109,6 +113,10 @@ const updateTrack = async (id: string, payload: TUpdateTrackPayloadType) => {
 
    // If description changed:
    if (description !== undefined) existingTrack.description = description;
+
+   if (metaTitle !== undefined) existingTrack.metaTitle = metaTitle;
+   if (metaDescription !== undefined)
+      existingTrack.metaDescription = metaDescription;
 
    await existingTrack.save({ validateBeforeSave: true });
 
@@ -170,7 +178,9 @@ const getAllTrack = async (query: TGetAllTrackQueryParamsType) => {
             trackId: "$_id",
             categoryId: "$categoryDetails._id",
             name: "$name",
-            description: "$description",
+            description: { $ifNull: ["$description", null] },
+            metaTitle: { $ifNull: ["$metaTitle", null] },
+            metaDescription: { $ifNull: ["$metaDescription", null] },
             isActive: "$isActive",
             author: "$author",
             categoryName: "$categoryDetails.name",

@@ -18,6 +18,19 @@ const createTrackSchema = z.object({
       name: requiredString("Name"),
       description: optionalString("Description").nullish(),
       isActive: requiredStrBoolean("Is Active").default(true),
+      metaTitle: requiredString("Meta title")
+         .max(60, {
+            error: "Meta title must not exceed 60 characters.",
+         })
+         .optional()
+         .nullish(),
+
+      metaDescription: requiredString("Meta description")
+         .max(160, {
+            error: "Meta description must not exceed 160 characters.",
+         })
+         .optional()
+         .nullish(),
    }),
 });
 
@@ -32,6 +45,19 @@ const updateTrackSchema = z.object({
 
       description: optionalString("Description").nullish(),
       isActive: requiredStrBoolean("Is Active").default(true),
+      metaTitle: requiredString("Meta title")
+         .max(60, {
+            error: "Meta title must not exceed 60 characters.",
+         })
+         .optional()
+         .nullish(),
+
+      metaDescription: requiredString("Meta description")
+         .max(160, {
+            error: "Meta description must not exceed 160 characters.",
+         })
+         .optional()
+         .nullish(),
    }),
 });
 

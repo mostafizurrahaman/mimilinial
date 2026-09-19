@@ -23,6 +23,16 @@ const trackSchema = new Schema<ITrackDoc>(
          allowNull: true,
          default: null,
       },
+      metaTitle: {
+         type: String,
+         allowNull: true,
+         maxLength: 60,
+      },
+      metaDescription: {
+         type: String,
+         allowNull: true,
+         maxLength: 160,
+      },
       isActive: {
          type: Boolean,
          default: true,

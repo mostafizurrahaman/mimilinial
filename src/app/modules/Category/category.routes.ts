@@ -21,7 +21,16 @@ router.post(
    multerFactory({
       category: "image",
       maxSizeInMB: 5,
-   }).single("icon"),
+   }).fields([
+      {
+         name: "icon",
+         maxCount: 1,
+      },
+      {
+         name: "ogImage",
+         maxCount: 1,
+      },
+   ]),
    auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
    validateRequest(categoryValidations.createCategorySchema),
    categoryControllers.createCategory,
@@ -33,7 +42,16 @@ router.patch(
    multerFactory({
       category: "image",
       maxSizeInMB: 5,
-   }).single("icon"),
+   }).fields([
+      {
+         name: "icon",
+         maxCount: 1,
+      },
+      {
+         name: "ogImage",
+         maxCount: 1,
+      },
+   ]),
    auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
    validateRequest(categoryValidations.updateCategorySchema),
    categoryControllers.updateCategory,

@@ -36,6 +36,20 @@ const categorySchema = new Schema<ICategoryDoc>(
          ref: "User",
          required: true,
       },
+      metaTitle: {
+         type: String,
+         allowNull: true,
+         maxLength: 60,
+      },
+      metaDescription: {
+         type: String,
+         allowNull: true,
+         maxLength: 160,
+      },
+      ogImage: {
+         type: String,
+         allowNull: true,
+      },
    },
    {
       timestamps: true,

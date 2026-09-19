@@ -24,14 +24,22 @@ import { createSlug, formatQuery, logger } from "@/app/utils";
 import uploadFileIntoCloudinary from "@/app/utils/cloudinary/upload-file";
 import { File_FOLDER_NAME } from "@/app/constants/folder_name";
 import { deleteFileByUrl } from "@/app/utils/cloudinary/delete-file";
+import type { ICategoryFiles } from "./category.interfaces";
 
 // 1. CREATE CATEGORY
 const createCategory = async (
    user: IUserDoc,
    payload: TCreateCategoryPayloadType,
-   iconFile?: TMulterFile,
+   files?: ICategoryFiles,
 ) => {
-   const { name, collectionId, description, isActive } = payload;
+   const {
+      name,
+      collectionId,
+      description,
+      isActive,
+      metaTitle,
+      metaDescription,
+   } = payload;
 
    // ?? Check is collection exists
    const collection = await Collection.findById(collectionId);
@@ -53,8 +61,14 @@ const createCategory = async (
       throw new ConflictError("Category with this slug already exists");
    }
 
+   // New Files:
+   const iconFile = files?.icon?.[0];
+   const ogImageFile = files?.ogImage?.[0];
+
    // ?? Upload icon
-   let iconUrl: string | undefined;
+   const newUrls: string[] = [];
+   let iconUrl: string | null = null;
+   let ogImageUrl: string | null = null;
 
    if (iconFile) {
       const uploadedIcon = await uploadFileIntoCloudinary(
@@ -62,7 +76,22 @@ const createCategory = async (
          File_FOLDER_NAME.CATEGORY_ICON,
       );
 
-      iconUrl = uploadedIcon?.secure_url;
+      if (uploadedIcon?.secure_url) {
+         newUrls.push(uploadedIcon.secure_url);
+         iconUrl = uploadedIcon.secure_url;
+      }
+   }
+
+   if (ogImageFile) {
+      const uploadedOgImage = await uploadFileIntoCloudinary(
+         ogImageFile,
+         File_FOLDER_NAME.OG_IMAGE,
+      );
+
+      if (uploadedOgImage?.secure_url) {
+         newUrls.push(uploadedOgImage.secure_url);
+         ogImageUrl = uploadedOgImage.secure_url;
+      }
    }
 
    try {
@@ -72,16 +101,21 @@ const createCategory = async (
          slug,
          collectionId,
          description: description?.trim(),
+         metaTitle,
+         metaDescription,
          isActive: isActive ?? true,
          icon: iconUrl,
+         ogImage: ogImageUrl,
          author: user?._id,
       });
 
       return result;
    } catch (error) {
-      if (iconUrl) {
-         deleteFileByUrl(iconUrl).catch(() =>
-            logger.error("Failed to delete uploaded collection icon", error),
+      if (newUrls.length > 0) {
+         Promise.all(newUrls.map((url) => deleteFileByUrl(url))).catch(
+            (err) => {
+               console.log(err);
+            },
          );
       }
 
@@ -93,7 +127,7 @@ const createCategory = async (
 const updateCategory = async (
    id: string,
    payload: TUpdateCategoryPayloadType,
-   iconFile?: TMulterFile,
+   files?: ICategoryFiles,
 ) => {
    // ?? Check category exists
    const existingCategory = await Category.findById(id);
@@ -102,7 +136,14 @@ const updateCategory = async (
       throw new NotFoundError("Category not found");
    }
 
-   const { name, collectionId, description, isActive } = payload;
+   const {
+      name,
+      collectionId,
+      description,
+      isActive,
+      metaTitle,
+      metaDescription,
+   } = payload;
 
    // Do Collection Validation:
    if (
@@ -142,10 +183,17 @@ const updateCategory = async (
 
    if (isActive !== undefined) existingCategory.isActive = isActive;
    if (description !== undefined) existingCategory.description = description;
+   if (metaTitle !== undefined) existingCategory.metaTitle = metaTitle;
+   if (metaDescription !== undefined)
+      existingCategory.metaDescription = metaDescription;
+
+   // New Files :
+   const iconFile = files?.icon?.[0];
+   const ogImageFile = files?.ogImage?.[0];
 
    // Upload file:
-   const oldImageUrl = existingCategory.icon;
-   let newImageUrl: string | null = null;
+   const oldUrls: string[] = [];
+   const newUrls: string[] = [];
 
    if (iconFile) {
       const uploadedIcon = await uploadFileIntoCloudinary(
@@ -153,28 +201,42 @@ const updateCategory = async (
          File_FOLDER_NAME.CATEGORY_ICON,
       );
 
-      newImageUrl = uploadedIcon?.secure_url as string;
-      existingCategory.icon = uploadedIcon?.secure_url as string;
+      if (uploadedIcon?.secure_url) {
+         if (existingCategory.icon) oldUrls.push(existingCategory.icon);
+         existingCategory.icon = uploadedIcon?.secure_url as string;
+         newUrls.push(uploadedIcon.secure_url);
+      }
+   }
+
+   if (ogImageFile) {
+      const uploadedOgImage = await uploadFileIntoCloudinary(
+         ogImageFile,
+         File_FOLDER_NAME.OG_IMAGE,
+      );
+
+      if (uploadedOgImage?.secure_url) {
+         if (existingCategory.ogImage) oldUrls.push(existingCategory.ogImage);
+         existingCategory.ogImage = uploadedOgImage?.secure_url as string;
+         newUrls.push(uploadedOgImage.secure_url);
+      }
    }
 
    try {
       await existingCategory.save({ validateBeforeSave: true });
 
-      if (newImageUrl && oldImageUrl) {
-         deleteFileByUrl(oldImageUrl).catch((err) =>
-            logger.info(
-               "Failed to delete category icon url (update):",
-               err.message,
-            ),
+      if (oldUrls.length > 0) {
+         Promise.all(oldUrls.map((url) => deleteFileByUrl(url))).catch(
+            (err) => {
+               console.log(err);
+            },
          );
       }
    } catch (error) {
-      if (newImageUrl) {
-         deleteFileByUrl(newImageUrl).catch((err) =>
-            logger.info(
-               "Failed to delete category new icon url (update):",
-               err.message,
-            ),
+      if (newUrls.length > 0) {
+         Promise.all(newUrls.map((url) => deleteFileByUrl(url))).catch(
+            (err) => {
+               console.log(err);
+            },
          );
       }
 
@@ -251,10 +313,19 @@ const getAllCategory = async (query: TGetAllCategoryQueryParamsType) => {
             categoryId: "$_id",
             name: "$name",
             slug: "$slug",
-            icon: "$icon",
-            description: "$description",
+            icon: { $ifNull: ["$icon", null] },
+            ogImage: { $ifNull: ["$ogImage", null] },
+            description: {
+               $ifNull: ["$description", null],
+            },
             isActive: "$isActive",
             author: "$author",
+            metaTitle: {
+               $ifNull: ["$metaTitle", null],
+            },
+            metaDescription: {
+               $ifNull: ["$metaDescription", null],
+            },
             collectionId: "$collectionId",
             collectionName: "$collectionDetails.name",
             collectionSlug: "$collectionDetails.slug",
@@ -339,6 +410,19 @@ const deleteCategoryById = async (id: string) => {
 
    if (!result) {
       throw new AppError(httpStatus.NOT_FOUND, "Category not found");
+   }
+
+   const oldImageUrls: string[] = [];
+
+   if (result.icon) oldImageUrls.push(result.icon);
+   if (result.ogImage) oldImageUrls.push(result.ogImage);
+
+   if (oldImageUrls?.length > 0) {
+      Promise.all(oldImageUrls.map((url) => deleteFileByUrl(url))).catch(
+         (err) => {
+            console.log(err);
+         },
+      );
    }
 
    return result;

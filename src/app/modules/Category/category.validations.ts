@@ -18,6 +18,19 @@ const createCategorySchema = z.object({
       name: requiredString("Category name"),
       description: optionalString("Category description").nullish(),
       isActive: requiredStrBoolean("isActive").default(true),
+      metaTitle: requiredString("Meta title")
+         .max(60, {
+            error: "Meta title must not exceed 60 characters.",
+         })
+         .optional()
+         .nullish(),
+
+      metaDescription: requiredString("Meta description")
+         .max(160, {
+            error: "Meta description must not exceed 160 characters.",
+         })
+         .optional()
+         .nullish(),
    }),
 });
 
@@ -31,6 +44,19 @@ const updateCategorySchema = z.object({
       name: requiredString("Category name"),
       description: optionalString("Category description").nullish(),
       isActive: requiredStrBoolean("isActive").default(true),
+      metaTitle: requiredString("Meta title")
+         .max(60, {
+            error: "Meta title must not exceed 60 characters.",
+         })
+         .optional()
+         .nullish(),
+
+      metaDescription: requiredString("Meta description")
+         .max(160, {
+            error: "Meta description must not exceed 160 characters.",
+         })
+         .optional()
+         .nullish(),
    }),
 });
 

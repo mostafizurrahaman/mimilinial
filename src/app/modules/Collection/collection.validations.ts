@@ -16,8 +16,19 @@ const createCollectionSchema = z.object({
    body: z.object({
       name: requiredString("Name"),
       description: optionalString("Description").nullish(),
-      metaTitle: optionalString("Meta title"),
-      metaDescription: optionalString("Meta description"),
+      metaTitle: requiredString("Meta title")
+         .max(60, {
+            error: "Meta title must not exceed 60 characters.",
+         })
+         .optional()
+         .nullish(),
+
+      metaDescription: requiredString("Meta description")
+         .max(160, {
+            error: "Meta description must not exceed 160 characters.",
+         })
+         .optional()
+         .nullish(),
    }),
 });
 
@@ -30,8 +41,19 @@ const updateCollectionSchema = z.object({
       name: requiredString("Name"),
       isActive: requiredStrBoolean("isActive").optional(),
       description: optionalString("Description").nullish(),
-      metaTitle: optionalString("Meta title"),
-      metaDescription: optionalString("Meta description"),
+      metaTitle: requiredString("Meta title")
+         .max(60, {
+            error: "Meta title must not exceed 60 characters.",
+         })
+         .optional()
+         .nullish(),
+
+      metaDescription: requiredString("Meta description")
+         .max(160, {
+            error: "Meta description must not exceed 160 characters.",
+         })
+         .optional()
+         .nullish(),
    }),
 });
 

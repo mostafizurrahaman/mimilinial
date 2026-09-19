@@ -1,16 +1,13 @@
 import httpStatus from "http-status";
 import { categoryServices } from "./category.services";
 import { sendResponse, catchAsync, getUserFromRequest } from "../../utils";
+import type { ICategoryFiles } from "./category.interfaces";
 
 // 1. CREATE CATEGORY
 const createCategory = catchAsync(async (req, res) => {
-   const iconFile = req.file;
+   const files = req.files as unknown as ICategoryFiles;
    const user = await getUserFromRequest(req);
-   const result = await categoryServices.createCategory(
-      user,
-      req.body,
-      iconFile,
-   );
+   const result = await categoryServices.createCategory(user, req.body, files);
 
    sendResponse(res, {
       statusCode: httpStatus.CREATED,
@@ -21,12 +18,12 @@ const createCategory = catchAsync(async (req, res) => {
 
 // 2. UPDATE CATEGORY
 const updateCategory = catchAsync(async (req, res) => {
-   const iconFile = req.file;
+   const files = req.files as unknown as ICategoryFiles;
    const categoryId = req.params.id as string;
    const result = await categoryServices.updateCategory(
       categoryId as string,
       req.body,
-      iconFile,
+      files,
    );
 
    sendResponse(res, {

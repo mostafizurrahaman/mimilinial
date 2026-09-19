@@ -32,10 +32,12 @@ const collectionSchema = new Schema<ICollectionDoc>(
       metaTitle: {
          type: String,
          maxLength: 60,
+         allowNull: true,
       },
       metaDescription: {
          type: String,
          maxLength: 160,
+         allowNull: true,
       },
       ogImage: {
          type: String,
