@@ -3,6 +3,7 @@ import { userRoutes } from "@/app/modules/User";
 import { authRoutes } from "../modules/Auth";
 import { collectionRoutes } from "../modules/Collection";
 import { categoryRoutes } from "../modules/Category";
+import { trackRoutes } from "../modules/Track";
 
 const router: Router = express();
 
@@ -22,6 +23,10 @@ const routes = [
    {
       path: "/category",
       route: categoryRoutes,
+   },
+   {
+      path: "/track",
+      route: trackRoutes,
    },
 ];
 

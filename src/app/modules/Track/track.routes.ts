@@ -15,40 +15,47 @@ const router: Router = express.Router();
 
 // 1. CREATE TRACK
 router.post(
-  "/",
-  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
-  validateRequest(trackValidations.createTrackSchema),
-  trackControllers.createTrack,
+   "/",
+   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+   validateRequest(trackValidations.createTrackSchema),
+   trackControllers.createTrack,
 );
 
 // 2. UPDATE TRACK
 router.patch(
-  "/:id",
-  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
-  validateRequest(trackValidations.updateTrackSchema),
-  trackControllers.updateTrack,
+   "/:id",
+   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+   validateRequest(trackValidations.updateTrackSchema),
+   trackControllers.updateTrack,
 );
 
 // 3. GET ALL TRACK
 router.get(
-  "/all",
-  validateRequest(trackValidations.getAllTrackSchema),
-  trackControllers.getAllTrack,
+   "/all",
+   validateRequest(trackValidations.getAllTrackSchema),
+   trackControllers.getAllTrack,
+);
+
+// 3. GET ALL TRACK
+router.get(
+   "/active",
+   validateRequest(trackValidations.getAllTrackSchema),
+   trackControllers.getAllActiveTracks,
 );
 
 // 4. GET TRACK BY ID
 router.get(
-  "/:id",
-  validateRequest(trackValidations.getTrackByIdSchema),
-  trackControllers.getTrackById,
+   "/:id",
+   validateRequest(trackValidations.getTrackByIdSchema),
+   trackControllers.getTrackById,
 );
 
 // 5. DELETE TRACK BY ID
 router.delete(
-  "/:id",
-  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
-  validateRequest(trackValidations.deleteTrackByIdSchema),
-  trackControllers.deleteTrackById,
+   "/:id",
+   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+   validateRequest(trackValidations.deleteTrackByIdSchema),
+   trackControllers.deleteTrackById,
 );
 
 export const trackRoutes = router;
