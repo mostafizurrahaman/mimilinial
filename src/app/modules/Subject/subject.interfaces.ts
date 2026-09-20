@@ -1,18 +1,21 @@
-import { Document } from "mongoose";
+import type { TMulterFile } from "@/app/interfaces/multer.types";
+import { Document, Types } from "mongoose";
 
 export interface ISubject {
-   name_bn: string;
-   name_en: string;
-   slug: string;
-   code: string;
-   description?: string | null;
-   colorCode: string;
-   icon?: string | null;
-   sortOrder: number;
-   isFeatured: boolean;
-   metaTitle?: string | null;
-   metaDescription?: string | null;
-   ogImage?: string | null;
+  name_bn: string;
+  name_en: string;
+  slug: string;
+  code: string;
+  description?: string | null;
+  colorCode: string;
+  icon?: string | null;
+  sortOrder: number;
+  isFeatured: boolean;
+  isActive: boolean;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  ogImage?: string | null;
+  author: Types.ObjectId;
 }
 
 export interface ISubjectDoc extends Document, ISubject {}
@@ -26,3 +29,8 @@ export interface ISubjectDoc extends Document, ISubject {}
 // 6	PUT	/api/admin/subjects/:id	Admin	সাবজেক্ট আপডেট (Update)
 // 7	DELETE	/api/admin/subjects/:id	Admin	সাবজেক্ট ডিলিট (Delete)
 // 8	PATCH	/api/admin/subjects/reorder	Admin	sortOrder ব্যাচ আপডেট (Drag & Drop)
+
+export interface ISubjectFiles {
+  icon: TMulterFile[];
+  ogImage: TMulterFile[];
+}
