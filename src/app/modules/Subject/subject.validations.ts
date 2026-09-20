@@ -104,7 +104,7 @@ const getAllSubjectSchema = z.object({
       isActive: requiredStrBoolean("Is active").optional(),
       fromDate: optionalDate("From date"),
       toDate: optionalDate("To date"),
-      projectType: optionalEnumString(subjectProjectTypes, "projectType"),
+      projection: optionalEnumString(subjectProjectTypes, "projection"),
    }),
 });
 
@@ -119,7 +119,7 @@ const getAllActiveSubjectSchema = z.object({
       isFeatured: requiredStrBoolean("Is featured").optional(),
       fromDate: optionalDate("From date"),
       toDate: optionalDate("To date"),
-      projectType: optionalEnumString(subjectProjectTypes, "projectType"),
+      projection: optionalEnumString(subjectProjectTypes, "projection"),
    }),
 });
 

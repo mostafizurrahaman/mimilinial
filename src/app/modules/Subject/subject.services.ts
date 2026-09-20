@@ -236,7 +236,7 @@ const updateSubject = async (
 
 // 3. GET ALL SUBJECT
 const getAllSubject = async (query: TGetAllSubjectQueryParamsType) => {
-   const { isFeatured, isActive, projectType } = query;
+   const { isFeatured, isActive, projection } = query;
    const {
       page,
       limit,
@@ -280,7 +280,7 @@ const getAllSubject = async (query: TGetAllSubjectQueryParamsType) => {
       });
    }
 
-   const fields = subjectProjections[projectType as "list" | "details"];
+   const fields = subjectProjections[projection as "list" | "details"];
 
    pipeline.push({
       $project: fields,
