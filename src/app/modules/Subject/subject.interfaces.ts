@@ -7,11 +7,12 @@ export interface ISubject {
    code: string;
    description?: string | null;
    colorCode: string;
-   icon: string;
+   icon?: string | null;
    sortOrder: number;
    isFeatured: boolean;
-   metaTitle: string;
-   metaDescription: string;
+   metaTitle?: string | null;
+   metaDescription?: string | null;
+   ogImage?: string | null;
 }
 
 export interface ISubjectDoc extends Document, ISubject {}
