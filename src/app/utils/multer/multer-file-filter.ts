@@ -1,5 +1,4 @@
 import type multer from "multer";
-
 import type { Request } from "express";
 import { isFileExtensionAllowed } from "./filter-by-extension";
 import type { FileValidationConfig } from "@/app/interfaces/multer.types";
