@@ -1,10 +1,12 @@
 import type { TMulterFile } from "@/app/interfaces/multer.types";
 import { Document, Types } from "mongoose";
+import type { TCollectionStatus } from "./collection.constants";
 
 export interface ICollection {
-   name: string;
+   nameBn: string;
+   nameEn: string;
    slug: string;
-   isActive: boolean;
+   status: TCollectionStatus;
    description: string;
    author: Types.ObjectId;
    icon?: string | null;
@@ -13,6 +15,8 @@ export interface ICollection {
    metaTitle?: string | null;
    metaDescription?: string | null;
    ogImage?: string | null;
+   publishedAt?: Date | null;
+   archivedAt?: Date | null;
 }
 
 export interface ICollectionFiles {

@@ -48,6 +48,19 @@ const getAllCollection = catchAsync(async (req, res) => {
       meta: result.meta,
    });
 });
+// 3.1. GET ALL COLLECTION
+const getAllPublishedCollection = catchAsync(async (req, res) => {
+   const result = await collectionServices.getAllPublishedCollections(
+      req.validQuery,
+   );
+
+   sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: "All published collection are retrieved successfully!",
+      data: result.data,
+      meta: result.meta,
+   });
+});
 
 // 4. GET COLLECTION BY ID
 const getCollectionById = catchAsync(async (req, res) => {
@@ -81,4 +94,5 @@ export const collectionControllers = {
    getAllCollection,
    getCollectionById,
    deleteCollectionById,
+   getAllPublishedCollection,
 };

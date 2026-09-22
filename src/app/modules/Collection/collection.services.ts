@@ -4,10 +4,13 @@ import type {
    TCreateCollectionPayloadType,
    TUpdateCollectionPayloadType,
    TGetAllCollectionQueryParamsType,
+   TGetAllPublishedCollectionQueryParamsType,
 } from "./collection.validations";
 import { AppError, BadRequest, ConflictError } from "../../errors";
 import { Collection } from "./collection.model";
 import {
+   COLLECTION_STATUS,
+   collectionProjection,
    collectionSearchableFields,
    collectionSortableFields,
 } from "./collection.constants";
@@ -17,7 +20,7 @@ import type { TMulterFile } from "@/app/interfaces/multer.types";
 import uploadFileIntoCloudinary from "@/app/utils/cloudinary/upload-file";
 import { File_FOLDER_NAME } from "@/app/constants/folder_name";
 import { deleteFileByUrl } from "@/app/utils/cloudinary/delete-file";
-import type { ICollectionFiles } from "./collection.interfaces";
+import type { ICollection, ICollectionFiles } from "./collection.interfaces";
 import { deleteFilesByUrls } from "@/app/utils/cloudinary/delete-files";
 
 // 1. CREATE COLLECTION
@@ -26,10 +29,10 @@ const createCollection = async (
    payload: TCreateCollectionPayloadType,
    files: ICollectionFiles,
 ) => {
-   const { name, description, metaTitle, metaDescription } = payload;
+   const { nameBn, nameEn, description, metaTitle, metaDescription } = payload;
 
    // Generate slug & check uniqueness
-   const slug = createSlug(name);
+   const slug = createSlug(nameEn);
    const collectionExists = await Collection.findOne({ slug });
 
    if (collectionExists) {
@@ -40,7 +43,7 @@ const createCollection = async (
    const icon = files?.icon?.[0];
    const ogImage = files?.ogImage?.[0];
 
-   const uploadedUrls: string[] = [];
+   const newUrls: string[] = [];
 
    try {
       let iconUrl: string | null = null;
@@ -54,7 +57,7 @@ const createCollection = async (
          );
          if (uploadedFile?.url) {
             iconUrl = uploadedFile.url;
-            uploadedUrls.push(iconUrl);
+            newUrls.push(iconUrl);
          }
       }
 
@@ -66,13 +69,13 @@ const createCollection = async (
          );
          if (uploadedFile?.url) {
             ogImageUrl = uploadedFile.url;
-            uploadedUrls.push(ogImageUrl);
+            newUrls.push(ogImageUrl);
          }
       }
 
-      // Create Database Record
-      const result = await Collection.create({
-         name,
+      const collectionPayload: ICollection = {
+         nameEn,
+         nameBn,
          slug,
          description: description!,
          metaTitle,
@@ -80,16 +83,15 @@ const createCollection = async (
          icon: iconUrl,
          ogImage: ogImageUrl,
          author: user._id,
-         isActive: true,
-      });
+         status: COLLECTION_STATUS.DRAFT,
+      };
+
+      // Create Database Record
+      const result = await Collection.create(collectionPayload);
 
       return result;
    } catch (error) {
-      if (uploadedUrls.length > 0) {
-         Promise.all(uploadedUrls.map((url) => deleteFileByUrl(url))).catch(
-            (err) => console.log(err),
-         );
-      }
+      deleteFilesByUrls(newUrls);
       throw error;
    }
 };
@@ -107,8 +109,11 @@ const updateCollection = async (
    }
 
    // ?? Check is name changed ?
-   if (payload.name) {
-      const slug = createSlug(payload.name);
+   if (
+      payload.nameEn !== undefined &&
+      existingCollection.nameEn !== payload.nameEn
+   ) {
+      const slug = createSlug(payload.nameEn);
 
       // Check is any collection exists with this slug?:
       const duplicateSlug = await Collection.findOne({
@@ -123,12 +128,11 @@ const updateCollection = async (
             "Collection with the same name already exists.",
          );
       }
-      existingCollection.name = payload.name;
+      existingCollection.nameEn = payload.nameEn!;
       existingCollection.slug = slug;
    }
 
-   if (payload.isActive !== undefined)
-      existingCollection.isActive = payload.isActive;
+   if (payload.nameBn !== undefined) existingCollection.nameBn = payload.nameBn;
 
    if (payload.description !== undefined)
       existingCollection.description = payload.description!;
@@ -144,34 +148,34 @@ const updateCollection = async (
    const iconFile = files?.icon?.[0];
    const ogImage = files?.ogImage?.[0];
 
-   if (iconFile) {
-      const uploadedFile = await uploadFileIntoCloudinary(
-         iconFile,
-         File_FOLDER_NAME.ICON,
-      );
-      // Added safety guard check
-      if (uploadedFile?.secure_url) {
-         if (existingCollection.icon) oldUrls.push(existingCollection.icon);
-         existingCollection.icon = uploadedFile.secure_url as string;
-         newUrls.push(uploadedFile.secure_url as string);
-      }
-   }
-
-   if (ogImage) {
-      const uploadedFile = await uploadFileIntoCloudinary(
-         ogImage,
-         File_FOLDER_NAME.OG_IMAGE,
-      );
-      // Added safety guard check
-      if (uploadedFile?.secure_url) {
-         if (existingCollection.ogImage)
-            oldUrls.push(existingCollection.ogImage);
-         existingCollection.ogImage = uploadedFile.secure_url as string;
-         newUrls.push(uploadedFile.secure_url as string);
-      }
-   }
-
    try {
+      if (iconFile) {
+         const uploadedFile = await uploadFileIntoCloudinary(
+            iconFile,
+            File_FOLDER_NAME.ICON,
+         );
+         // Added safety guard check
+         if (uploadedFile?.secure_url) {
+            if (existingCollection.icon) oldUrls.push(existingCollection.icon);
+            existingCollection.icon = uploadedFile.secure_url as string;
+            newUrls.push(uploadedFile.secure_url as string);
+         }
+      }
+
+      if (ogImage) {
+         const uploadedFile = await uploadFileIntoCloudinary(
+            ogImage,
+            File_FOLDER_NAME.OG_IMAGE,
+         );
+         // Added safety guard check
+         if (uploadedFile?.secure_url) {
+            if (existingCollection.ogImage)
+               oldUrls.push(existingCollection.ogImage);
+            existingCollection.ogImage = uploadedFile.secure_url as string;
+            newUrls.push(uploadedFile.secure_url as string);
+         }
+      }
+
       await existingCollection.save({ validateBeforeSave: true });
 
       deleteFilesByUrls(oldUrls);
@@ -185,6 +189,7 @@ const updateCollection = async (
 
 // 3. GET ALL COLLECTION
 const getAllCollection = async (query: TGetAllCollectionQueryParamsType) => {
+   const { status, projection } = query;
    const {
       page,
       limit,
@@ -192,6 +197,7 @@ const getAllCollection = async (query: TGetAllCollectionQueryParamsType) => {
       searchTerm,
       sortOrder,
       sortBy,
+
       fromDate,
       toDate,
    } = formatQuery(query, collectionSortableFields);
@@ -206,6 +212,19 @@ const getAllCollection = async (query: TGetAllCollectionQueryParamsType) => {
       pipeline.push({ $match: { createdAt: dateFilter } });
    }
 
+   if (status !== undefined) {
+      pipeline.push({
+         $match: {
+            status,
+         },
+      });
+   }
+
+   const projectionFields =
+      collectionProjection[
+         (projection as "list" | "details" | "options") || "details"
+      ];
+
    if (searchTerm) {
       pipeline.push({
          $match: {
@@ -217,20 +236,7 @@ const getAllCollection = async (query: TGetAllCollectionQueryParamsType) => {
    }
 
    pipeline.push({
-      $project: {
-         collectionId: "$_id",
-         name: "$name",
-         slug: "$slug",
-         isActive: "$isActive",
-         author: "$author",
-         description: { $ifNull: ["$description", null] },
-         icon: { $ifNull: ["$icon", null] },
-         metaTitle: { $ifNull: ["$metaTitle", null] },
-         metaDescription: { $ifNull: ["$metaDescription", null] },
-         ogImage: { $ifNull: ["$ogImage", null] },
-         createdAt: "$createdAt",
-         updatedAt: "$updatedAt",
-      },
+      $project: projectionFields,
    });
 
    pipeline.push({ $sort: { [sortBy]: sortOrder } });
@@ -256,6 +262,16 @@ const getAllCollection = async (query: TGetAllCollectionQueryParamsType) => {
          totalPages: Math.ceil(total / limit) || 1,
       },
    };
+};
+
+// 3.1 : GET ALL PUBLISHED COLLECTION :
+const getAllPublishedCollections = async (
+   query: TGetAllPublishedCollectionQueryParamsType,
+) => {
+   return await getAllCollection({
+      ...query,
+      status: COLLECTION_STATUS.PUBLISHED,
+   });
 };
 
 // 4. GET COLLECTION BY ID
@@ -304,4 +320,5 @@ export const collectionServices = {
    getAllCollection,
    getCollectionById,
    deleteCollectionById,
+   getAllPublishedCollections,
 };
