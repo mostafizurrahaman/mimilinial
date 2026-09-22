@@ -88,6 +88,32 @@ const deleteCollectionById = catchAsync(async (req, res) => {
    });
 });
 
+// 6. Mark as Published
+const markAsPublished = catchAsync(async (req, res) => {
+   const result = await collectionServices.markAsPublished(
+      req.params.id as string,
+   );
+
+   sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: "Collection published successfully.",
+      data: result,
+   });
+});
+
+// 7. Mark as Archived
+const markAsArchived = catchAsync(async (req, res) => {
+   const result = await collectionServices.markAsArchived(
+      req.params.id as string,
+   );
+
+   sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: "Collection archived successfully.",
+      data: result,
+   });
+});
+
 export const collectionControllers = {
    createCollection,
    updateCollection,
@@ -95,4 +121,6 @@ export const collectionControllers = {
    getCollectionById,
    deleteCollectionById,
    getAllPublishedCollection,
+   markAsPublished,
+   markAsArchived,
 };

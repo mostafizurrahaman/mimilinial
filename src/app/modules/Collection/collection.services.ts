@@ -6,7 +6,12 @@ import type {
    TGetAllCollectionQueryParamsType,
    TGetAllPublishedCollectionQueryParamsType,
 } from "./collection.validations";
-import { AppError, BadRequest, ConflictError } from "../../errors";
+import {
+   AppError,
+   BadRequest,
+   ConflictError,
+   NotFoundError,
+} from "../../errors";
 import { Collection } from "./collection.model";
 import {
    COLLECTION_STATUS,
@@ -314,6 +319,68 @@ const deleteCollectionById = async (id: string) => {
    return result;
 };
 
+// 6. Mark as Published
+const markAsPublished = async (id: string) => {
+   const collection = await Collection.findById(id);
+
+   // ?? Check collection exists
+   if (!collection) {
+      throw new NotFoundError("Collection not found.");
+   }
+
+   // ?? Already published
+   if (collection.status === COLLECTION_STATUS.PUBLISHED) {
+      throw new BadRequest("This collection has already been published.");
+   }
+
+   // ?? Cannot publish archived collection
+   if (collection.status === COLLECTION_STATUS.ARCHIVED) {
+      throw new BadRequest("You cannot publish an archived collection.");
+   }
+
+   // ?? Publish collection
+   collection.status = COLLECTION_STATUS.PUBLISHED;
+   collection.publishedAt = new Date();
+
+   await collection.save({
+      validateBeforeSave: true,
+   });
+
+   return collection;
+};
+
+// 7. Mark as Archived
+const markAsArchived = async (id: string) => {
+   const collection = await Collection.findById(id);
+
+   // ?? Check collection exists
+   if (!collection) {
+      throw new NotFoundError("Collection not found.");
+   }
+
+   // ?? Already archived
+   if (collection.status === COLLECTION_STATUS.ARCHIVED) {
+      throw new BadRequest("This collection has already been archived.");
+   }
+
+   // ?? Only published collection can be archived
+   if (collection.status !== COLLECTION_STATUS.PUBLISHED) {
+      throw new BadRequest(
+         `Only published collections can be archived. Current status: "${collection.status}".`,
+      );
+   }
+
+   // ?? Archive collection
+   collection.status = COLLECTION_STATUS.ARCHIVED;
+   collection.archivedAt = new Date();
+
+   await collection.save({
+      validateBeforeSave: true,
+   });
+
+   return collection;
+};
+
 export const collectionServices = {
    createCollection,
    updateCollection,
@@ -321,4 +388,6 @@ export const collectionServices = {
    getCollectionById,
    deleteCollectionById,
    getAllPublishedCollections,
+   markAsArchived,
+   markAsPublished,
 };

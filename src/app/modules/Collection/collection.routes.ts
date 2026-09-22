@@ -51,15 +51,41 @@ router.patch(
          maxCount: 1,
       },
    ]),
+   auth(UserRoles.ADMIN),
+   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
    validateRequest(collectionValidations.updateCollectionSchema),
    collectionControllers.updateCollection,
+);
+
+// 2.1 Update Status:
+router.patch(
+   "/:id/published",
+   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+   validateRequest(collectionValidations.getCollectionByIdSchema),
+   collectionControllers.markAsPublished,
+);
+
+// 2.2 Update Status:
+router.patch(
+   "/:id/archived",
+   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+   validateRequest(collectionValidations.getCollectionByIdSchema),
+   collectionControllers.markAsArchived,
 );
 
 // 3. GET ALL COLLECTION
 router.get(
    "/all",
+   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
    validateRequest(collectionValidations.getAllCollectionSchema),
    collectionControllers.getAllCollection,
+);
+
+// 3.1 GET all published Collection:
+router.get(
+   "/published",
+   validateRequest(collectionValidations.getAllPublishedCollectionSchema),
+   collectionControllers.getAllPublishedCollection,
 );
 
 // 4. GET COLLECTION BY ID

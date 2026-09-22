@@ -112,6 +112,7 @@ export const collectionValidations = {
    getAllCollectionSchema,
    getCollectionByIdSchema,
    deleteCollectionByIdSchema,
+   getAllPublishedCollectionSchema,
 };
 
 export type TCreateCollectionPayloadType = z.infer<
