@@ -27,6 +27,10 @@ import { File_FOLDER_NAME } from "@/app/constants/folder_name";
 import { deleteFileByUrl } from "@/app/utils/cloudinary/delete-file";
 import type { ICollection, ICollectionFiles } from "./collection.interfaces";
 import { deleteFilesByUrls } from "@/app/utils/cloudinary/delete-files";
+import mongoose, { mongo } from "mongoose";
+import { Category, categoryStatus } from "../Category";
+import { Topic } from "../Topic";
+import { Track } from "../Track";
 
 // 1. CREATE COLLECTION
 const createCollection = async (
@@ -374,11 +378,79 @@ const markAsArchived = async (id: string) => {
    collection.status = COLLECTION_STATUS.ARCHIVED;
    collection.archivedAt = new Date();
 
-   await collection.save({
-      validateBeforeSave: true,
-   });
+   const mongoSession = await mongoose.startSession();
 
-   return collection;
+   try {
+      mongoSession.startTransaction();
+
+      await collection.save({
+         validateBeforeSave: true,
+         session: mongoSession,
+      });
+
+      // Find categories with this  ids:
+      const associatedCategories = await Category.find({
+         collectionId: collection?._id,
+      }).session(mongoSession);
+
+      const categoryIds = associatedCategories.map((item) => item._id) || [];
+
+      // Find the Topics with ids:
+      const tracks = await Track.find({
+         category: {
+            $in: categoryIds,
+         },
+      }).session(mongoSession);
+
+      const trackIds = tracks?.map((item) => item._id) || [];
+
+      if (categoryIds?.length > 0) {
+         await Category.updateMany(
+            {
+               _id: {
+                  $in: categoryIds,
+               },
+            },
+            {
+               $set: {
+                  archivedAt: new Date(),
+                  status: categoryStatus.ARCHIVED,
+               },
+            },
+            {
+               session: mongoSession,
+            },
+         );
+      }
+
+      if (trackIds?.length > 0) {
+         await Track.updateMany(
+            {
+               _id: {
+                  $in: trackIds,
+               },
+            },
+            {
+               $set: {
+                  archivedAt: new Date(),
+                  status: "archived",
+               },
+            },
+            {
+               session: mongoSession,
+            },
+         );
+      }
+
+      await mongoSession.commitTransaction();
+
+      return collection;
+   } catch (error) {
+      await mongoSession.abortTransaction();
+      throw error;
+   } finally {
+      await mongoSession.endSession();
+   }
 };
 
 export const collectionServices = {

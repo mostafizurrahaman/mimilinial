@@ -1,424 +1,418 @@
 import httpStatus from "http-status";
 import { Types, type PipelineStage } from "mongoose";
 import type {
-  TCreateCategoryPayloadType,
-  TUpdateCategoryPayloadType,
-  TGetAllCategoryQueryParamsType,
-  TGetAllActiveCategoryQueryParamsType,
+   TCreateCategoryPayloadType,
+   TUpdateCategoryPayloadType,
+   TGetAllCategoryQueryParamsType,
+   TGetAllPublishedCategoryQueryParamsType,
 } from "./category.validations";
 import {
-  AppError,
-  BadRequest,
-  ConflictError,
-  NotFoundError,
+   AppError,
+   BadRequest,
+   ConflictError,
+   NotFoundError,
 } from "../../errors";
 import { Category } from "./category.model";
 import {
-  categorySearchableFields,
-  categorySortableFields,
+   categoryProjection,
+   categoryProjectionValues,
+   categorySearchableFields,
+   categorySortableFields,
+   categoryStatus,
 } from "./category.constants";
 import type { IUserDoc } from "../User";
 import type { TMulterFile } from "@/app/interfaces/multer.types";
-import { Collection } from "../Collection";
+import { Collection, COLLECTION_STATUS } from "../Collection";
 import { createSlug, formatQuery, logger } from "@/app/utils";
 import uploadFileIntoCloudinary from "@/app/utils/cloudinary/upload-file";
 import { File_FOLDER_NAME } from "@/app/constants/folder_name";
 import { deleteFileByUrl } from "@/app/utils/cloudinary/delete-file";
 import type { ICategoryFiles } from "./category.interfaces";
+import { deleteFilesByUrls } from "@/app/utils/cloudinary/delete-files";
 
 // 1. CREATE CATEGORY
 const createCategory = async (
-  user: IUserDoc,
-  payload: TCreateCategoryPayloadType,
-  files?: ICategoryFiles,
+   user: IUserDoc,
+   payload: TCreateCategoryPayloadType,
+   files?: ICategoryFiles,
 ) => {
-  const {
-    name,
-    collectionId,
-    description,
-    isActive,
-    metaTitle,
-    metaDescription,
-  } = payload;
-
-  // ?? Check is collection exists
-  const collection = await Collection.findById(collectionId);
-
-  if (!collection) {
-    throw new NotFoundError("Collection not found");
-  }
-
-  // ?? Generate slug
-  const slug = createSlug(name);
-
-  // ?? Check duplicate slug
-  const existingSlug = await Category.findOne({
-    collectionId,
-    slug,
-  });
-
-  if (existingSlug) {
-    throw new ConflictError("Category with this slug already exists");
-  }
-
-  // New Files:
-  const iconFile = files?.icon?.[0];
-  const ogImageFile = files?.ogImage?.[0];
-
-  // ?? Upload icon
-  const newUrls: string[] = [];
-  let iconUrl: string | null = null;
-  let ogImageUrl: string | null = null;
-
-  if (iconFile) {
-    const uploadedIcon = await uploadFileIntoCloudinary(
-      iconFile,
-      File_FOLDER_NAME.CATEGORY_ICON,
-    );
-
-    if (uploadedIcon?.secure_url) {
-      newUrls.push(uploadedIcon.secure_url);
-      iconUrl = uploadedIcon.secure_url;
-    }
-  }
-
-  if (ogImageFile) {
-    const uploadedOgImage = await uploadFileIntoCloudinary(
-      ogImageFile,
-      File_FOLDER_NAME.OG_IMAGE,
-    );
-
-    if (uploadedOgImage?.secure_url) {
-      newUrls.push(uploadedOgImage.secure_url);
-      ogImageUrl = uploadedOgImage.secure_url;
-    }
-  }
-
-  try {
-    // ?? Create category
-    const result = await Category.create({
-      name: name.trim(),
-      slug,
+   const {
+      nameBn,
+      nameEn,
       collectionId,
-      description: description?.trim(),
+      description,
       metaTitle,
       metaDescription,
-      isActive: isActive ?? true,
-      icon: iconUrl,
-      ogImage: ogImageUrl,
-      author: user?._id,
-    });
+   } = payload;
 
-    return result;
-  } catch (error) {
-    if (newUrls.length > 0) {
-      Promise.all(newUrls.map((url) => deleteFileByUrl(url))).catch((err) => {
-        console.log(err);
+   // ?? Check is collection exists
+   const collection = await Collection.findById(collectionId);
+
+   if (!collection) {
+      throw new NotFoundError("Collection not found");
+   }
+
+   if (collection.status !== COLLECTION_STATUS.PUBLISHED) {
+      throw new BadRequest(
+         "Category can only be created under a published collection.",
+      );
+   }
+
+   // ?? Generate slug
+   const slug = createSlug(nameEn);
+
+   // ?? Check duplicate slug
+   const existingSlug = await Category.findOne({
+      collectionId,
+      slug,
+   });
+
+   if (existingSlug) {
+      throw new ConflictError("Category with this slug already exists");
+   }
+
+   // New Files:
+   const iconFile = files?.icon?.[0];
+   const ogImageFile = files?.ogImage?.[0];
+
+   // ?? Upload icon
+   const newUrls: string[] = [];
+   let iconUrl: string | null = null;
+   let ogImageUrl: string | null = null;
+
+   try {
+      if (iconFile) {
+         const uploadedIcon = await uploadFileIntoCloudinary(
+            iconFile,
+            File_FOLDER_NAME.CATEGORY_ICON,
+         );
+
+         if (uploadedIcon?.secure_url) {
+            newUrls.push(uploadedIcon.secure_url);
+            iconUrl = uploadedIcon.secure_url;
+         }
+      }
+
+      if (ogImageFile) {
+         const uploadedOgImage = await uploadFileIntoCloudinary(
+            ogImageFile,
+            File_FOLDER_NAME.OG_IMAGE,
+         );
+
+         if (uploadedOgImage?.secure_url) {
+            newUrls.push(uploadedOgImage.secure_url);
+            ogImageUrl = uploadedOgImage.secure_url;
+         }
+      }
+
+      // ?? Create category
+      const result = await Category.create({
+         nameBn: nameBn.trim(),
+         nameEn: nameEn?.trim(),
+         slug,
+         collectionId,
+         description: description?.trim(),
+         metaTitle,
+         metaDescription,
+         status: categoryStatus.DRAFT,
+         icon: iconUrl,
+         ogImage: ogImageUrl,
+         author: user?._id,
       });
-    }
 
-    throw error;
-  }
+      return result;
+   } catch (error) {
+      if (newUrls.length > 0) {
+         Promise.all(newUrls.map((url) => deleteFileByUrl(url))).catch(
+            (err) => {
+               console.log(err);
+            },
+         );
+      }
+
+      throw error;
+   }
 };
 
 // 2. UPDATE CATEGORY
 const updateCategory = async (
-  id: string,
-  payload: TUpdateCategoryPayloadType,
-  files?: ICategoryFiles,
+   id: string,
+   payload: TUpdateCategoryPayloadType,
+   files?: ICategoryFiles,
 ) => {
-  // ?? Check category exists
-  const existingCategory = await Category.findById(id);
+   // ?? Check category exists
+   const existingCategory = await Category.findById(id);
 
-  if (!existingCategory) {
-    throw new NotFoundError("Category not found");
-  }
+   if (!existingCategory) {
+      throw new NotFoundError("Category not found");
+   }
 
-  const {
-    name,
-    collectionId,
-    description,
-    isActive,
-    metaTitle,
-    metaDescription,
-  } = payload;
+   const {
+      nameBn,
+      nameEn,
+      collectionId,
+      description,
+      metaTitle,
+      metaDescription,
+   } = payload;
 
-  // Do Collection Validation:
-  if (
-    collectionId &&
-    collectionId?.toString() !== existingCategory.collectionId?.toString()
-  ) {
-    // Check is collection exists:
-    const existingColl = await Collection.findById(collectionId);
+   // Do Collection Validation:
+   if (
+      collectionId &&
+      collectionId?.toString() !== existingCategory.collectionId?.toString()
+   ) {
+      // Check is collection exists:
+      const existingColl = await Collection.findById(collectionId);
 
-    if (!existingColl) {
-      throw new NotFoundError("Collection not found.");
-    }
+      if (!existingColl) {
+         throw new NotFoundError("Collection not found.");
+      }
 
-    existingCategory.collectionId = existingColl._id;
-  }
+      if (existingColl.status !== COLLECTION_STATUS.PUBLISHED) {
+         throw new BadRequest(
+            "Category can only be created under a published collection.",
+         );
+      }
 
-  // Duplicate validation and name changed:
-  const categoryName = name !== undefined ? name : existingCategory.name;
-  const slug = createSlug(categoryName);
+      existingCategory.collectionId = existingColl._id;
+   }
 
-  const duplicateSlug = await Category.findOne({
-    _id: {
-      $ne: existingCategory._id,
-    },
-    collectionId: existingCategory.collectionId,
-    slug,
-  });
+   // Duplicate validation and name changed:
+   const categoryName = nameEn !== undefined ? nameEn : existingCategory.nameEn;
+   const slug = createSlug(categoryName);
 
-  if (duplicateSlug) {
-    throw new ConflictError(
-      "The category exists with this same name under this collection.",
-    );
-  }
+   const duplicateSlug = await Category.findOne({
+      _id: {
+         $ne: existingCategory._id,
+      },
+      collectionId: existingCategory.collectionId,
+      slug,
+   });
 
-  existingCategory.name = categoryName;
-  existingCategory.slug = slug;
+   if (duplicateSlug) {
+      throw new ConflictError(
+         "The category exists with this same name under this collection.",
+      );
+   }
 
-  if (isActive !== undefined) existingCategory.isActive = isActive;
-  if (description !== undefined) existingCategory.description = description;
-  if (metaTitle !== undefined) existingCategory.metaTitle = metaTitle;
-  if (metaDescription !== undefined)
-    existingCategory.metaDescription = metaDescription;
+   existingCategory.nameEn = categoryName;
+   existingCategory.slug = slug;
+   if (nameBn !== undefined) existingCategory.nameBn = nameBn;
+   if (description !== undefined) existingCategory.description = description;
+   if (metaTitle !== undefined) existingCategory.metaTitle = metaTitle;
+   if (metaDescription !== undefined)
+      existingCategory.metaDescription = metaDescription;
 
-  // New Files :
-  const iconFile = files?.icon?.[0];
-  const ogImageFile = files?.ogImage?.[0];
+   // New Files :
+   const iconFile = files?.icon?.[0];
+   const ogImageFile = files?.ogImage?.[0];
 
-  // Upload file:
-  const oldUrls: string[] = [];
-  const newUrls: string[] = [];
+   // Upload file:
+   const oldUrls: string[] = [];
+   const newUrls: string[] = [];
 
-  if (iconFile) {
-    const uploadedIcon = await uploadFileIntoCloudinary(
-      iconFile,
-      File_FOLDER_NAME.CATEGORY_ICON,
-    );
+   try {
+      if (iconFile) {
+         const uploadedIcon = await uploadFileIntoCloudinary(
+            iconFile,
+            File_FOLDER_NAME.CATEGORY_ICON,
+         );
 
-    if (uploadedIcon?.secure_url) {
-      if (existingCategory.icon) oldUrls.push(existingCategory.icon);
-      existingCategory.icon = uploadedIcon?.secure_url as string;
-      newUrls.push(uploadedIcon.secure_url);
-    }
-  }
+         if (uploadedIcon?.secure_url) {
+            if (existingCategory.icon) oldUrls.push(existingCategory.icon);
+            existingCategory.icon = uploadedIcon?.secure_url as string;
+            newUrls.push(uploadedIcon.secure_url);
+         }
+      }
 
-  if (ogImageFile) {
-    const uploadedOgImage = await uploadFileIntoCloudinary(
-      ogImageFile,
-      File_FOLDER_NAME.OG_IMAGE,
-    );
+      if (ogImageFile) {
+         const uploadedOgImage = await uploadFileIntoCloudinary(
+            ogImageFile,
+            File_FOLDER_NAME.OG_IMAGE,
+         );
 
-    if (uploadedOgImage?.secure_url) {
-      if (existingCategory.ogImage) oldUrls.push(existingCategory.ogImage);
-      existingCategory.ogImage = uploadedOgImage?.secure_url as string;
-      newUrls.push(uploadedOgImage.secure_url);
-    }
-  }
+         if (uploadedOgImage?.secure_url) {
+            if (existingCategory.ogImage)
+               oldUrls.push(existingCategory.ogImage);
+            existingCategory.ogImage = uploadedOgImage?.secure_url as string;
+            newUrls.push(uploadedOgImage.secure_url);
+         }
+      }
 
-  try {
-    await existingCategory.save({ validateBeforeSave: true });
+      await existingCategory.save({ validateBeforeSave: true });
 
-    if (oldUrls.length > 0) {
-      Promise.all(oldUrls.map((url) => deleteFileByUrl(url))).catch((err) => {
-        console.log(err);
-      });
-    }
-  } catch (error) {
-    if (newUrls.length > 0) {
-      Promise.all(newUrls.map((url) => deleteFileByUrl(url))).catch((err) => {
-        console.log(err);
-      });
-    }
+      deleteFilesByUrls(oldUrls);
+   } catch (error) {
+      deleteFilesByUrls(newUrls);
 
-    throw error;
-  }
+      throw error;
+   }
 };
 
 // 3. GET ALL CATEGORY
 const getAllCategory = async (query: TGetAllCategoryQueryParamsType) => {
-  const { collectionId, isActive, isCollectionActive } = query;
-  const { page, limit, skip, searchTerm, sortOrder, sortBy, fromDate, toDate } =
-    formatQuery(query, categorySortableFields);
-
-  console.log({
-    collectionId,
-    isActive,
-  });
-
-  const pipeline: PipelineStage[] = [];
-
-  if (fromDate || toDate) {
-    const dateFilter: Record<string, unknown> = {};
-    if (fromDate) dateFilter.$gte = new Date(fromDate);
-    if (toDate) dateFilter.$lte = new Date(toDate);
-
-    pipeline.push({ $match: { createdAt: dateFilter } });
-  }
-
-  const conditions: PipelineStage.Match = {
-    $match: {},
-  };
-
-  if (collectionId) {
-    conditions.$match["collectionId"] = new Types.ObjectId(collectionId);
-  }
-
-  pipeline.push(
-    {
-      $lookup: {
-        from: "collections",
-        localField: "collectionId",
-        foreignField: "_id",
-        as: "collectionDetails",
-        pipeline: [
-          {
-            $project: {
-              _id: 0,
-              name: 1,
-              slug: 1,
-              icon: 1,
-              isActive: 1,
-            },
-          },
-        ],
-      },
-    },
-    {
-      $unwind: {
-        path: "$collectionDetails",
-        preserveNullAndEmptyArrays: true,
-      },
-    },
-    {
-      $project: {
-        _id: 0,
-        categoryId: "$_id",
-        name: "$name",
-        slug: "$slug",
-        icon: { $ifNull: ["$icon", null] },
-        ogImage: { $ifNull: ["$ogImage", null] },
-        description: {
-          $ifNull: ["$description", null],
-        },
-        isActive: "$isActive",
-        author: "$author",
-        metaTitle: {
-          $ifNull: ["$metaTitle", null],
-        },
-        metaDescription: {
-          $ifNull: ["$metaDescription", null],
-        },
-        collectionId: "$collectionId",
-        collectionName: "$collectionDetails.name",
-        collectionSlug: "$collectionDetails.slug",
-        collectionIcon: { $ifNull: ["$collectionDetails.icon", null] },
-        isCollectionActive: "$collectionDetails.isActive",
-        createdAt: "$createdAt",
-        updatedAt: "$updatedAt",
-      },
-    },
-  );
-
-  if (isActive !== undefined) {
-    conditions.$match["isActive"] = isActive;
-  }
-
-  if (isCollectionActive !== undefined) {
-    conditions.$match["isCollectionActive"] = isCollectionActive;
-  }
-
-  pipeline.push(conditions);
-
-  if (searchTerm) {
-    pipeline.push({
-      $match: {
-        $or: categorySearchableFields.map((field) => ({
-          [field]: { $regex: searchTerm, $options: "i" },
-        })),
-      },
-    });
-  }
-
-  pipeline.push({ $sort: { [sortBy]: sortOrder } });
-
-  pipeline.push({
-    $facet: {
-      data: [{ $skip: skip }, { $limit: limit }],
-      meta: [{ $count: "total" }],
-    },
-  });
-
-  const aggregated = await Category.aggregate(pipeline);
-
-  const data = aggregated?.[0]?.data || [];
-  const total = aggregated?.[0]?.meta?.[0]?.total || 0;
-
-  return {
-    data,
-    meta: {
+   const { collectionId, status, collectionStatus, projection } = query;
+   const {
       page,
       limit,
-      total,
-      totalPages: Math.ceil(total / limit) || 1,
-    },
-  };
+      skip,
+      searchTerm,
+      sortOrder,
+      sortBy,
+      fromDate,
+      toDate,
+   } = formatQuery(query, categorySortableFields);
+
+   const pipeline: PipelineStage[] = [];
+
+   if (fromDate || toDate) {
+      const dateFilter: Record<string, unknown> = {};
+      if (fromDate) dateFilter.$gte = new Date(fromDate);
+      if (toDate) dateFilter.$lte = new Date(toDate);
+
+      pipeline.push({ $match: { createdAt: dateFilter } });
+   }
+
+   const conditions: PipelineStage.Match = {
+      $match: {},
+   };
+
+   if (collectionId) {
+      conditions.$match["collectionId"] = new Types.ObjectId(collectionId);
+   }
+
+   pipeline.push(
+      {
+         $lookup: {
+            from: "collections",
+            localField: "collectionId",
+            foreignField: "_id",
+            as: "collectionDetails",
+            pipeline: [
+               {
+                  $project: {
+                     _id: 0,
+                     name: 1,
+                     slug: 1,
+                     icon: 1,
+                     status: 1,
+                  },
+               },
+            ],
+         },
+      },
+      {
+         $unwind: {
+            path: "$collectionDetails",
+            preserveNullAndEmptyArrays: true,
+         },
+      },
+   );
+
+   const categoryProjectionFields =
+      categoryProjection?.[projection as "list" | "details" | "options"] ||
+      "details";
+
+   pipeline.push({
+      $project: categoryProjectionFields,
+   });
+
+   if (status !== undefined) {
+      conditions.$match["status"] = status;
+   }
+
+   if (collectionStatus !== undefined) {
+      conditions.$match["collectionStatus"] = collectionStatus;
+   }
+
+   pipeline.push(conditions);
+
+   if (searchTerm) {
+      pipeline.push({
+         $match: {
+            $or: categorySearchableFields.map((field) => ({
+               [field]: { $regex: searchTerm, $options: "i" },
+            })),
+         },
+      });
+   }
+
+   pipeline.push({ $sort: { [sortBy]: sortOrder } });
+
+   pipeline.push({
+      $facet: {
+         data: [{ $skip: skip }, { $limit: limit }],
+         meta: [{ $count: "total" }],
+      },
+   });
+
+   const aggregated = await Category.aggregate(pipeline);
+
+   const data = aggregated?.[0]?.data || [];
+   const total = aggregated?.[0]?.meta?.[0]?.total || 0;
+
+   return {
+      data,
+      meta: {
+         page,
+         limit,
+         total,
+         totalPages: Math.ceil(total / limit) || 1,
+      },
+   };
 };
 
 // 3.1 GET ALL ACTIVE CATEGORY:
-const getAllActiveCategory = async (
-  query: TGetAllActiveCategoryQueryParamsType,
+const getAllPublishedCategory = async (
+   query: TGetAllPublishedCategoryQueryParamsType,
 ) => {
-  return await getAllCategory({
-    isActive: true,
-    isCollectionActive: true,
-    ...query,
-  });
+   return await getAllCategory({
+      status: categoryStatus.PUBLISHED,
+      collectionStatus: COLLECTION_STATUS.PUBLISHED,
+      ...query,
+   });
 };
 
 // 4. GET CATEGORY BY ID
 const getCategoryById = async (id: string) => {
-  const result = await Category.findById(id);
+   const result = await Category.findById(id);
 
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, "Category not found");
-  }
+   if (!result) {
+      throw new AppError(httpStatus.NOT_FOUND, "Category not found");
+   }
 
-  return result;
+   return result;
 };
 
 // 5. DELETE CATEGORY BY ID
 const deleteCategoryById = async (id: string) => {
-  const result = await Category.findOneAndDelete({ _id: id });
+   const result = await Category.findOneAndDelete({ _id: id });
 
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, "Category not found");
-  }
+   if (!result) {
+      throw new AppError(httpStatus.NOT_FOUND, "Category not found");
+   }
 
-  const oldImageUrls: string[] = [];
+   const oldImageUrls: string[] = [];
 
-  if (result.icon) oldImageUrls.push(result.icon);
-  if (result.ogImage) oldImageUrls.push(result.ogImage);
+   if (result.icon) oldImageUrls.push(result.icon);
+   if (result.ogImage) oldImageUrls.push(result.ogImage);
 
-  if (oldImageUrls?.length > 0) {
-    Promise.all(oldImageUrls.map((url) => deleteFileByUrl(url))).catch(
-      (err) => {
-        console.log(err);
-      },
-    );
-  }
+   if (oldImageUrls?.length > 0) {
+      Promise.all(oldImageUrls.map((url) => deleteFileByUrl(url))).catch(
+         (err) => {
+            console.log(err);
+         },
+      );
+   }
 
-  return result;
+   return result;
 };
 
 export const categoryServices = {
-  createCategory,
-  updateCategory,
-  getAllCategory,
-  getCategoryById,
-  deleteCategoryById,
-  getAllActiveCategory,
+   createCategory,
+   updateCategory,
+   getAllCategory,
+   getCategoryById,
+   deleteCategoryById,
+   getAllPublishedCategory,
 };

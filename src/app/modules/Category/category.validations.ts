@@ -6,32 +6,25 @@ import {
    optionalString,
    optionalDate,
    requiredMongooseId,
-   requiredStrBoolean,
 } from "../../utils";
-import { categorySortableFields } from "./category.constants";
+import {
+   categoryProjectionValues,
+   categorySortableFields,
+   categoryStatusValues,
+} from "./category.constants";
 import { sortOrderValues } from "../../constants";
+import { COLLECTION_STATUS_VALUES, seoSchema } from "../Collection";
 
 // 1. CREATE CATEGORY
 const createCategorySchema = z.object({
-   body: z.object({
-      collectionId: requiredMongooseId("Collection ID"),
-      name: requiredString("Category name"),
-      description: optionalString("Category description").nullish(),
-      isActive: requiredStrBoolean("isActive").default(true),
-      metaTitle: requiredString("Meta title")
-         .max(60, {
-            error: "Meta title must not exceed 60 characters.",
-         })
-         .optional()
-         .nullish(),
-
-      metaDescription: requiredString("Meta description")
-         .max(160, {
-            error: "Meta description must not exceed 160 characters.",
-         })
-         .optional()
-         .nullish(),
-   }),
+   body: z
+      .object({
+         collectionId: requiredMongooseId("Collection ID"),
+         nameBn: requiredString("Category name in Bangla"),
+         nameEn: requiredString("Category name in English"),
+         description: optionalString("Category description").nullish(),
+      })
+      .extend(seoSchema.shape),
 });
 
 // 2. UPDATE CATEGORY
@@ -39,25 +32,14 @@ const updateCategorySchema = z.object({
    params: z.object({
       id: requiredMongooseId("Collection ID"),
    }),
-   body: z.object({
-      collectionId: requiredMongooseId("Collection ID"),
-      name: requiredString("Category name"),
-      description: optionalString("Category description").nullish(),
-      isActive: requiredStrBoolean("isActive").default(true),
-      metaTitle: requiredString("Meta title")
-         .max(60, {
-            error: "Meta title must not exceed 60 characters.",
-         })
-         .optional()
-         .nullish(),
-
-      metaDescription: requiredString("Meta description")
-         .max(160, {
-            error: "Meta description must not exceed 160 characters.",
-         })
-         .optional()
-         .nullish(),
-   }),
+   body: z
+      .object({
+         collectionId: requiredMongooseId("Collection ID").optional(),
+         nameBn: optionalString("Category name in Bangla"),
+         nameEn: requiredString("Category name in English"),
+         description: optionalString("Category description").nullish(),
+      })
+      .extend(seoSchema.shape),
 });
 
 // 3. GET ALL CATEGORY
@@ -66,20 +48,24 @@ const getAllCategorySchema = z.object({
       page: optionalNumber("Page"),
       limit: optionalNumber("Limit"),
       collectionId: requiredMongooseId("Collection ID").optional(),
-      isActive: requiredStrBoolean("isActive").optional(),
-      isCollectionActive: requiredStrBoolean("isActive").optional(),
+      status: optionalEnumString(categoryStatusValues, "Status"),
+      collectionStatus: optionalEnumString(
+         COLLECTION_STATUS_VALUES,
+         "Collection Status",
+      ),
       searchTerm: optionalString("Search term"),
       sortOrder: optionalEnumString(sortOrderValues, "Sort order"),
       sortBy: optionalEnumString(categorySortableFields, "Sort by"),
       fromDate: optionalDate("From date"),
       toDate: optionalDate("To date"),
+      projection: optionalEnumString(categoryProjectionValues, "Projection"),
    }),
 });
 
-const getAllActiveCategorySchema = z.object({
+const getAllPublishedCategorySchema = z.object({
    query: getAllCategorySchema.shape.query.omit({
-      isActive: true,
-      isCollectionActive: true,
+      status: true,
+      collectionStatus: true,
    }),
 });
 
@@ -103,7 +89,7 @@ export const categoryValidations = {
    getAllCategorySchema,
    getCategoryByIdSchema,
    deleteCategoryByIdSchema,
-   getAllActiveCategorySchema,
+   getAllPublishedCategorySchema,
 };
 
 export type TCreateCategoryPayloadType = z.infer<
@@ -115,8 +101,8 @@ export type TUpdateCategoryPayloadType = z.infer<
 export type TGetAllCategoryQueryParamsType = z.infer<
    typeof getAllCategorySchema.shape.query
 >;
-export type TGetAllActiveCategoryQueryParamsType = z.infer<
-   typeof getAllActiveCategorySchema.shape.query
+export type TGetAllPublishedCategoryQueryParamsType = z.infer<
+   typeof getAllPublishedCategorySchema.shape.query
 >;
 export type TGetCategoryByIdParamsType = z.infer<
    typeof getCategoryByIdSchema.shape.params

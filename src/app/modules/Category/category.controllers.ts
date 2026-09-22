@@ -45,8 +45,10 @@ const getAllCategory = catchAsync(async (req, res) => {
    });
 });
 
-const getAllActiveCategory = catchAsync(async (req, res) => {
-   const result = await categoryServices.getAllActiveCategory(req.validQuery);
+const getAllPublishedCategory = catchAsync(async (req, res) => {
+   const result = await categoryServices.getAllPublishedCategory(
+      req.validQuery,
+   );
 
    sendResponse(res, {
       statusCode: httpStatus.OK,
@@ -88,5 +90,5 @@ export const categoryControllers = {
    getAllCategory,
    getCategoryById,
    deleteCategoryById,
-   getAllActiveCategory,
+   getAllPublishedCategory,
 };

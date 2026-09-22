@@ -66,9 +66,9 @@ router.get(
 
 // 3.1 GET ALL ACTIVE CATEGORY
 router.get(
-   "/active",
-   validateRequest(categoryValidations.getAllActiveCategorySchema),
-   categoryControllers.getAllActiveCategory,
+   "/published",
+   validateRequest(categoryValidations.getAllPublishedCategorySchema),
+   categoryControllers.getAllPublishedCategory,
 );
 
 // 4. GET CATEGORY BY ID
