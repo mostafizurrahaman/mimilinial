@@ -1,5 +1,6 @@
 import { Schema, model } from "mongoose";
 import type { ITrackDoc } from "./track.interfaces";
+import { trackStatus, trackStatusValues } from "./track.constants";
 
 const trackSchema = new Schema<ITrackDoc>(
   {
@@ -8,7 +9,12 @@ const trackSchema = new Schema<ITrackDoc>(
       required: true,
       ref: "Category",
     },
-    name: {
+    nameBn: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    nameEn: {
       type: String,
       required: true,
       lowercase: true,
@@ -33,15 +39,25 @@ const trackSchema = new Schema<ITrackDoc>(
       allowNull: true,
       maxLength: 160,
     },
-    isActive: {
-      type: Boolean,
-      default: true,
-      required: true,
+    status: {
+      type: String,
+      enum: trackStatusValues,
+      default: trackStatus.DRAFT,
     },
     author: {
       type: Schema.Types.ObjectId,
       required: true,
       ref: "Author",
+    },
+    publishedAt: {
+      type: Date,
+      allowNull: true,
+      default: null,
+    },
+    archivedAt: {
+      type: Date,
+      allowNull: true,
+      default: null,
     },
   },
   {

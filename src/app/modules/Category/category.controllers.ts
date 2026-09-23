@@ -5,90 +5,114 @@ import type { ICategoryFiles } from "./category.interfaces";
 
 // 1. CREATE CATEGORY
 const createCategory = catchAsync(async (req, res) => {
-   const files = req.files as unknown as ICategoryFiles;
-   const user = await getUserFromRequest(req);
-   const result = await categoryServices.createCategory(user, req.body, files);
+  const files = req.files as unknown as ICategoryFiles;
+  const user = await getUserFromRequest(req);
+  const result = await categoryServices.createCategory(user, req.body, files);
 
-   sendResponse(res, {
-      statusCode: httpStatus.CREATED,
-      message: "The category created successfully!",
-      data: result,
-   });
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    message: "The category created successfully!",
+    data: result,
+  });
 });
 
 // 2. UPDATE CATEGORY
 const updateCategory = catchAsync(async (req, res) => {
-   const files = req.files as unknown as ICategoryFiles;
-   const categoryId = req.params.id as string;
-   const result = await categoryServices.updateCategory(
-      categoryId as string,
-      req.body,
-      files,
-   );
+  const files = req.files as unknown as ICategoryFiles;
+  const categoryId = req.params.id as string;
+  const result = await categoryServices.updateCategory(
+    categoryId as string,
+    req.body,
+    files,
+  );
 
-   sendResponse(res, {
-      statusCode: httpStatus.OK,
-      message: "The category updated successfully!",
-      data: result,
-   });
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: "The category updated successfully!",
+    data: result,
+  });
 });
 
 // 3. GET ALL CATEGORY
 const getAllCategory = catchAsync(async (req, res) => {
-   const result = await categoryServices.getAllCategory(req.validQuery);
+  const result = await categoryServices.getAllCategory(req.validQuery);
 
-   sendResponse(res, {
-      statusCode: httpStatus.OK,
-      message: "All categories retrieved successfully!",
-      data: result.data,
-      meta: result.meta,
-   });
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: "All categories retrieved successfully!",
+    data: result.data,
+    meta: result.meta,
+  });
 });
 
 const getAllPublishedCategory = catchAsync(async (req, res) => {
-   const result = await categoryServices.getAllPublishedCategory(
-      req.validQuery,
-   );
+  const result = await categoryServices.getAllPublishedCategory(req.validQuery);
 
-   sendResponse(res, {
-      statusCode: httpStatus.OK,
-      message: "All active categories retrieved successfully!",
-      data: result.data,
-      meta: result.meta,
-   });
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: "All published categories retrieved successfully!",
+    data: result.data,
+    meta: result.meta,
+  });
 });
 
 // 4. GET CATEGORY BY ID
 const getCategoryById = catchAsync(async (req, res) => {
-   const result = await categoryServices.getCategoryById(
-      req.params.id as string,
-   );
+  const result = await categoryServices.getCategoryById(
+    req.params.id as string,
+  );
 
-   sendResponse(res, {
-      statusCode: httpStatus.OK,
-      message: "The category retrieved successfully!",
-      data: result,
-   });
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: "The category retrieved successfully!",
+    data: result,
+  });
 });
 
 // 5. DELETE CATEGORY BY ID
 const deleteCategoryById = catchAsync(async (req, res) => {
-   const result = await categoryServices.deleteCategoryById(
-      req.params.id as string,
-   );
+  const result = await categoryServices.deleteCategoryById(
+    req.params.id as string,
+  );
 
-   sendResponse(res, {
-      statusCode: httpStatus.OK,
-      message: "The category deleted successfully!",
-      data: result,
-   });
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: "The category deleted successfully!",
+    data: result,
+  });
+});
+
+// 6. MARK Category as Published:
+const markCategoryAsPublished = catchAsync(async (req, res) => {
+  const result = await categoryServices.markAsPublished(
+    req.params.id as string,
+  );
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: "Category published successfully.",
+    data: result,
+  });
+});
+
+// 6. MARK Category as Published:
+const markCategoryAsArchived = catchAsync(async (req, res) => {
+  const result = await categoryServices.markAsArchived(req.params.id as string);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: "Category archived successfully.",
+    data: result,
+  });
 });
 
 export const categoryControllers = {
-   createCategory,
-   updateCategory,
-   getAllCategory,
-   getCategoryById,
-   deleteCategoryById,
-   getAllPublishedCategory,
+  createCategory,
+  updateCategory,
+  getAllCategory,
+  getCategoryById,
+  deleteCategoryById,
+  getAllPublishedCategory,
+  markCategoryAsPublished,
+  markCategoryAsArchived,
 };

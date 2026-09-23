@@ -1,23 +1,23 @@
 import httpStatus from "http-status";
 import type { PipelineStage } from "mongoose";
 import type {
-   TCreateCollectionPayloadType,
-   TUpdateCollectionPayloadType,
-   TGetAllCollectionQueryParamsType,
-   TGetAllPublishedCollectionQueryParamsType,
+  TCreateCollectionPayloadType,
+  TUpdateCollectionPayloadType,
+  TGetAllCollectionQueryParamsType,
+  TGetAllPublishedCollectionQueryParamsType,
 } from "./collection.validations";
 import {
-   AppError,
-   BadRequest,
-   ConflictError,
-   NotFoundError,
+  AppError,
+  BadRequest,
+  ConflictError,
+  NotFoundError,
 } from "../../errors";
 import { Collection } from "./collection.model";
 import {
-   COLLECTION_STATUS,
-   collectionProjection,
-   collectionSearchableFields,
-   collectionSortableFields,
+  COLLECTION_STATUS,
+  collectionProjection,
+  collectionSearchableFields,
+  collectionSortableFields,
 } from "./collection.constants";
 import type { IUserDoc } from "../User";
 import { createSlug, formatQuery, logger } from "@/app/utils";
@@ -30,436 +30,434 @@ import { deleteFilesByUrls } from "@/app/utils/cloudinary/delete-files";
 import mongoose, { mongo } from "mongoose";
 import { Category, categoryStatus } from "../Category";
 import { Topic } from "../Topic";
-import { Track } from "../Track";
+import { Track, trackStatus } from "../Track";
 
 // 1. CREATE COLLECTION
 const createCollection = async (
-   user: IUserDoc,
-   payload: TCreateCollectionPayloadType,
-   files: ICollectionFiles,
+  user: IUserDoc,
+  payload: TCreateCollectionPayloadType,
+  files: ICollectionFiles,
 ) => {
-   const { nameBn, nameEn, description, metaTitle, metaDescription } = payload;
+  const { nameBn, nameEn, description, metaTitle, metaDescription } = payload;
 
-   // Generate slug & check uniqueness
-   const slug = createSlug(nameEn);
-   const collectionExists = await Collection.findOne({ slug });
+  // Generate slug & check uniqueness
+  const slug = createSlug(nameEn);
+  const collectionExists = await Collection.findOne({ slug });
 
-   if (collectionExists) {
-      throw new ConflictError("Collection with the same name already exists.");
-   }
+  if (collectionExists) {
+    throw new ConflictError("Collection with the same name already exists.");
+  }
 
-   // Extract files safely
-   const icon = files?.icon?.[0];
-   const ogImage = files?.ogImage?.[0];
+  // Extract files safely
+  const icon = files?.icon?.[0];
+  const ogImage = files?.ogImage?.[0];
 
-   const newUrls: string[] = [];
+  const newUrls: string[] = [];
 
-   try {
-      let iconUrl: string | null = null;
-      let ogImageUrl: string | null = null;
+  try {
+    let iconUrl: string | null = null;
+    let ogImageUrl: string | null = null;
 
-      // Upload Icon
-      if (icon) {
-         const uploadedFile = await uploadFileIntoCloudinary(
-            icon,
-            File_FOLDER_NAME.ICON,
-         );
-         if (uploadedFile?.url) {
-            iconUrl = uploadedFile.url;
-            newUrls.push(iconUrl);
-         }
+    // Upload Icon
+    if (icon) {
+      const uploadedFile = await uploadFileIntoCloudinary(
+        icon,
+        File_FOLDER_NAME.ICON,
+      );
+      if (uploadedFile?.url) {
+        iconUrl = uploadedFile.url;
+        newUrls.push(iconUrl);
       }
+    }
 
-      // Upload OG Image
-      if (ogImage) {
-         const uploadedFile = await uploadFileIntoCloudinary(
-            ogImage,
-            File_FOLDER_NAME.OG_IMAGE,
-         );
-         if (uploadedFile?.url) {
-            ogImageUrl = uploadedFile.url;
-            newUrls.push(ogImageUrl);
-         }
+    // Upload OG Image
+    if (ogImage) {
+      const uploadedFile = await uploadFileIntoCloudinary(
+        ogImage,
+        File_FOLDER_NAME.OG_IMAGE,
+      );
+      if (uploadedFile?.url) {
+        ogImageUrl = uploadedFile.url;
+        newUrls.push(ogImageUrl);
       }
+    }
 
-      const collectionPayload: ICollection = {
-         nameEn,
-         nameBn,
-         slug,
-         description: description!,
-         metaTitle,
-         metaDescription,
-         icon: iconUrl,
-         ogImage: ogImageUrl,
-         author: user._id,
-         status: COLLECTION_STATUS.DRAFT,
-      };
+    const collectionPayload: ICollection = {
+      nameEn,
+      nameBn,
+      slug,
+      description: description!,
+      metaTitle,
+      metaDescription,
+      icon: iconUrl,
+      ogImage: ogImageUrl,
+      author: user._id,
+      status: COLLECTION_STATUS.DRAFT,
+    };
 
-      // Create Database Record
-      const result = await Collection.create(collectionPayload);
+    // Create Database Record
+    const result = await Collection.create(collectionPayload);
 
-      return result;
-   } catch (error) {
-      deleteFilesByUrls(newUrls);
-      throw error;
-   }
+    return result;
+  } catch (error) {
+    deleteFilesByUrls(newUrls);
+    throw error;
+  }
 };
 
 // 2. UPDATE COLLECTION
 const updateCollection = async (
-   id: string,
-   payload: TUpdateCollectionPayloadType,
-   files: ICollectionFiles,
+  id: string,
+  payload: TUpdateCollectionPayloadType,
+  files: ICollectionFiles,
 ) => {
-   // ?? Check is collection already exists ?:
-   const existingCollection = await Collection.findById(id);
-   if (!existingCollection) {
-      throw new BadRequest("Collection not found.");
-   }
+  // ?? Check is collection already exists ?:
+  const existingCollection = await Collection.findById(id);
+  if (!existingCollection) {
+    throw new BadRequest("Collection not found.");
+  }
 
-   // ?? Check is name changed ?
-   if (
-      payload.nameEn !== undefined &&
-      existingCollection.nameEn !== payload.nameEn
-   ) {
-      const slug = createSlug(payload.nameEn);
+  // ?? Check is name changed ?
+  if (
+    payload.nameEn !== undefined &&
+    existingCollection.nameEn !== payload.nameEn
+  ) {
+    const slug = createSlug(payload.nameEn);
 
-      // Check is any collection exists with this slug?:
-      const duplicateSlug = await Collection.findOne({
-         _id: {
-            $ne: existingCollection?._id,
-         },
-         slug,
-      });
+    // Check is any collection exists with this slug?:
+    const duplicateSlug = await Collection.findOne({
+      _id: {
+        $ne: existingCollection?._id,
+      },
+      slug,
+    });
 
-      if (duplicateSlug) {
-         throw new ConflictError(
-            "Collection with the same name already exists.",
-         );
+    if (duplicateSlug) {
+      throw new ConflictError("Collection with the same name already exists.");
+    }
+    existingCollection.nameEn = payload.nameEn!;
+    existingCollection.slug = slug;
+  }
+
+  if (payload.nameBn !== undefined) existingCollection.nameBn = payload.nameBn;
+
+  if (payload.description !== undefined)
+    existingCollection.description = payload.description!;
+
+  if (payload.metaTitle !== undefined)
+    existingCollection.metaTitle = payload.metaTitle;
+
+  if (payload.metaDescription !== undefined)
+    existingCollection.metaDescription = payload.metaDescription;
+
+  const oldUrls: string[] = [];
+  const newUrls: string[] = [];
+  const iconFile = files?.icon?.[0];
+  const ogImage = files?.ogImage?.[0];
+
+  try {
+    if (iconFile) {
+      const uploadedFile = await uploadFileIntoCloudinary(
+        iconFile,
+        File_FOLDER_NAME.ICON,
+      );
+      // Added safety guard check
+      if (uploadedFile?.secure_url) {
+        if (existingCollection.icon) oldUrls.push(existingCollection.icon);
+        existingCollection.icon = uploadedFile.secure_url as string;
+        newUrls.push(uploadedFile.secure_url as string);
       }
-      existingCollection.nameEn = payload.nameEn!;
-      existingCollection.slug = slug;
-   }
+    }
 
-   if (payload.nameBn !== undefined) existingCollection.nameBn = payload.nameBn;
-
-   if (payload.description !== undefined)
-      existingCollection.description = payload.description!;
-
-   if (payload.metaTitle !== undefined)
-      existingCollection.metaTitle = payload.metaTitle;
-
-   if (payload.metaDescription !== undefined)
-      existingCollection.metaDescription = payload.metaDescription;
-
-   const oldUrls: string[] = [];
-   const newUrls: string[] = [];
-   const iconFile = files?.icon?.[0];
-   const ogImage = files?.ogImage?.[0];
-
-   try {
-      if (iconFile) {
-         const uploadedFile = await uploadFileIntoCloudinary(
-            iconFile,
-            File_FOLDER_NAME.ICON,
-         );
-         // Added safety guard check
-         if (uploadedFile?.secure_url) {
-            if (existingCollection.icon) oldUrls.push(existingCollection.icon);
-            existingCollection.icon = uploadedFile.secure_url as string;
-            newUrls.push(uploadedFile.secure_url as string);
-         }
+    if (ogImage) {
+      const uploadedFile = await uploadFileIntoCloudinary(
+        ogImage,
+        File_FOLDER_NAME.OG_IMAGE,
+      );
+      // Added safety guard check
+      if (uploadedFile?.secure_url) {
+        if (existingCollection.ogImage)
+          oldUrls.push(existingCollection.ogImage);
+        existingCollection.ogImage = uploadedFile.secure_url as string;
+        newUrls.push(uploadedFile.secure_url as string);
       }
+    }
 
-      if (ogImage) {
-         const uploadedFile = await uploadFileIntoCloudinary(
-            ogImage,
-            File_FOLDER_NAME.OG_IMAGE,
-         );
-         // Added safety guard check
-         if (uploadedFile?.secure_url) {
-            if (existingCollection.ogImage)
-               oldUrls.push(existingCollection.ogImage);
-            existingCollection.ogImage = uploadedFile.secure_url as string;
-            newUrls.push(uploadedFile.secure_url as string);
-         }
-      }
+    await existingCollection.save({ validateBeforeSave: true });
 
-      await existingCollection.save({ validateBeforeSave: true });
+    deleteFilesByUrls(oldUrls);
+  } catch (error) {
+    deleteFilesByUrls(newUrls);
+    throw error;
+  }
 
-      deleteFilesByUrls(oldUrls);
-   } catch (error) {
-      deleteFilesByUrls(newUrls);
-      throw error;
-   }
-
-   return existingCollection;
+  return existingCollection;
 };
 
 // 3. GET ALL COLLECTION
 const getAllCollection = async (query: TGetAllCollectionQueryParamsType) => {
-   const { status, projection } = query;
-   const {
+  const { status, projection } = query;
+  const {
+    page,
+    limit,
+    skip,
+    searchTerm,
+    sortOrder,
+    sortBy,
+
+    fromDate,
+    toDate,
+  } = formatQuery(query, collectionSortableFields);
+
+  const pipeline: PipelineStage[] = [];
+
+  if (fromDate || toDate) {
+    const dateFilter: Record<string, unknown> = {};
+    if (fromDate) dateFilter.$gte = new Date(fromDate);
+    if (toDate) dateFilter.$lte = new Date(toDate);
+
+    pipeline.push({ $match: { createdAt: dateFilter } });
+  }
+
+  if (status !== undefined) {
+    pipeline.push({
+      $match: {
+        status,
+      },
+    });
+  }
+
+  const projectionFields =
+    collectionProjection[
+      (projection as "list" | "details" | "options") || "details"
+    ];
+
+  if (searchTerm) {
+    pipeline.push({
+      $match: {
+        $or: collectionSearchableFields.map((field) => ({
+          [field]: { $regex: searchTerm, $options: "i" },
+        })),
+      },
+    });
+  }
+
+  pipeline.push({
+    $project: projectionFields,
+  });
+
+  pipeline.push({ $sort: { [sortBy]: sortOrder } });
+
+  pipeline.push({
+    $facet: {
+      data: [{ $skip: skip }, { $limit: limit }],
+      meta: [{ $count: "total" }],
+    },
+  });
+
+  const aggregated = await Collection.aggregate(pipeline);
+
+  const data = aggregated?.[0]?.data || [];
+  const total = aggregated?.[0]?.meta?.[0]?.total || 0;
+
+  return {
+    data,
+    meta: {
       page,
       limit,
-      skip,
-      searchTerm,
-      sortOrder,
-      sortBy,
-
-      fromDate,
-      toDate,
-   } = formatQuery(query, collectionSortableFields);
-
-   const pipeline: PipelineStage[] = [];
-
-   if (fromDate || toDate) {
-      const dateFilter: Record<string, unknown> = {};
-      if (fromDate) dateFilter.$gte = new Date(fromDate);
-      if (toDate) dateFilter.$lte = new Date(toDate);
-
-      pipeline.push({ $match: { createdAt: dateFilter } });
-   }
-
-   if (status !== undefined) {
-      pipeline.push({
-         $match: {
-            status,
-         },
-      });
-   }
-
-   const projectionFields =
-      collectionProjection[
-         (projection as "list" | "details" | "options") || "details"
-      ];
-
-   if (searchTerm) {
-      pipeline.push({
-         $match: {
-            $or: collectionSearchableFields.map((field) => ({
-               [field]: { $regex: searchTerm, $options: "i" },
-            })),
-         },
-      });
-   }
-
-   pipeline.push({
-      $project: projectionFields,
-   });
-
-   pipeline.push({ $sort: { [sortBy]: sortOrder } });
-
-   pipeline.push({
-      $facet: {
-         data: [{ $skip: skip }, { $limit: limit }],
-         meta: [{ $count: "total" }],
-      },
-   });
-
-   const aggregated = await Collection.aggregate(pipeline);
-
-   const data = aggregated?.[0]?.data || [];
-   const total = aggregated?.[0]?.meta?.[0]?.total || 0;
-
-   return {
-      data,
-      meta: {
-         page,
-         limit,
-         total,
-         totalPages: Math.ceil(total / limit) || 1,
-      },
-   };
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+    },
+  };
 };
 
 // 3.1 : GET ALL PUBLISHED COLLECTION :
 const getAllPublishedCollections = async (
-   query: TGetAllPublishedCollectionQueryParamsType,
+  query: TGetAllPublishedCollectionQueryParamsType,
 ) => {
-   return await getAllCollection({
-      ...query,
-      status: COLLECTION_STATUS.PUBLISHED,
-   });
+  return await getAllCollection({
+    ...query,
+    status: COLLECTION_STATUS.PUBLISHED,
+  });
 };
 
 // 4. GET COLLECTION BY ID
 const getCollectionById = async (id: string) => {
-   const result = await Collection.findById(id);
+  const result = await Collection.findById(id);
 
-   if (!result) {
-      throw new AppError(httpStatus.NOT_FOUND, "Collection not found");
-   }
+  if (!result) {
+    throw new AppError(httpStatus.NOT_FOUND, "Collection not found");
+  }
 
-   return result;
+  return result;
 };
 
 // 5. DELETE COLLECTION BY ID
 const deleteCollectionById = async (id: string) => {
-   // TODO: Remove all the related collection data later.
+  // TODO: Remove all the related collection data later.
 
-   const result = await Collection.findOneAndDelete(
-      { _id: id },
-      {
-         returnDocument: "after",
-      },
-   );
+  const result = await Collection.findOneAndDelete(
+    { _id: id },
+    {
+      returnDocument: "after",
+    },
+  );
 
-   if (!result) {
-      throw new AppError(httpStatus.NOT_FOUND, "Collection not found");
-   }
+  if (!result) {
+    throw new AppError(httpStatus.NOT_FOUND, "Collection not found");
+  }
 
-   const oldUrls: string[] = [];
+  const oldUrls: string[] = [];
 
-   if (result.icon) oldUrls.push(result.icon);
-   if (result.ogImage) oldUrls.push(result.ogImage);
+  if (result.icon) oldUrls.push(result.icon);
+  if (result.ogImage) oldUrls.push(result.ogImage);
 
-   if (oldUrls.length > 0) {
-      await Promise.all(oldUrls.map((url) => deleteFileByUrl(url))).catch(
-         (err) => console.error("Asset deletion failed:", err),
-      );
-   }
+  if (oldUrls.length > 0) {
+    await Promise.all(oldUrls.map((url) => deleteFileByUrl(url))).catch((err) =>
+      console.error("Asset deletion failed:", err),
+    );
+  }
 
-   return result;
+  return result;
 };
 
 // 6. Mark as Published
 const markAsPublished = async (id: string) => {
-   const collection = await Collection.findById(id);
+  const collection = await Collection.findById(id);
 
-   // ?? Check collection exists
-   if (!collection) {
-      throw new NotFoundError("Collection not found.");
-   }
+  // ?? Check collection exists
+  if (!collection) {
+    throw new NotFoundError("Collection not found.");
+  }
 
-   // ?? Already published
-   if (collection.status === COLLECTION_STATUS.PUBLISHED) {
-      throw new BadRequest("This collection has already been published.");
-   }
+  // ?? Already published
+  if (collection.status === COLLECTION_STATUS.PUBLISHED) {
+    throw new BadRequest("This collection has already been published.");
+  }
 
-   // ?? Cannot publish archived collection
-   if (collection.status === COLLECTION_STATUS.ARCHIVED) {
-      throw new BadRequest("You cannot publish an archived collection.");
-   }
+  // ?? Cannot publish archived collection
+  if (collection.status === COLLECTION_STATUS.ARCHIVED) {
+    throw new BadRequest("You cannot publish an archived collection.");
+  }
 
-   // ?? Publish collection
-   collection.status = COLLECTION_STATUS.PUBLISHED;
-   collection.publishedAt = new Date();
+  // ?? Publish collection
+  collection.status = COLLECTION_STATUS.PUBLISHED;
+  collection.publishedAt = new Date();
 
-   await collection.save({
-      validateBeforeSave: true,
-   });
+  await collection.save({
+    validateBeforeSave: true,
+  });
 
-   return collection;
+  return collection;
 };
 
 // 7. Mark as Archived
 const markAsArchived = async (id: string) => {
-   const collection = await Collection.findById(id);
+  const collection = await Collection.findById(id);
 
-   // ?? Check collection exists
-   if (!collection) {
-      throw new NotFoundError("Collection not found.");
-   }
+  // ?? Check collection exists
+  if (!collection) {
+    throw new NotFoundError("Collection not found.");
+  }
 
-   // ?? Already archived
-   if (collection.status === COLLECTION_STATUS.ARCHIVED) {
-      throw new BadRequest("This collection has already been archived.");
-   }
+  // ?? Already archived
+  if (collection.status === COLLECTION_STATUS.ARCHIVED) {
+    throw new BadRequest("This collection has already been archived.");
+  }
 
-   // ?? Only published collection can be archived
-   if (collection.status !== COLLECTION_STATUS.PUBLISHED) {
-      throw new BadRequest(
-         `Only published collections can be archived. Current status: "${collection.status}".`,
-      );
-   }
+  // ?? Only published collection can be archived
+  if (collection.status !== COLLECTION_STATUS.PUBLISHED) {
+    throw new BadRequest(
+      `Only published collections can be archived. Current status: "${collection.status}".`,
+    );
+  }
 
-   // ?? Archive collection
-   collection.status = COLLECTION_STATUS.ARCHIVED;
-   collection.archivedAt = new Date();
+  // ?? Archive collection
+  collection.status = COLLECTION_STATUS.ARCHIVED;
+  collection.archivedAt = new Date();
 
-   const mongoSession = await mongoose.startSession();
+  const mongoSession = await mongoose.startSession();
 
-   try {
-      mongoSession.startTransaction();
+  try {
+    mongoSession.startTransaction();
 
-      await collection.save({
-         validateBeforeSave: true,
-         session: mongoSession,
-      });
+    await collection.save({
+      validateBeforeSave: true,
+      session: mongoSession,
+    });
 
-      // Find categories with this  ids:
-      const associatedCategories = await Category.find({
-         collectionId: collection?._id,
-      }).session(mongoSession);
+    // Find categories with this  ids:
+    const associatedCategories = await Category.find({
+      collectionId: collection?._id,
+    }).session(mongoSession);
 
-      const categoryIds = associatedCategories.map((item) => item._id) || [];
+    const categoryIds = associatedCategories.map((item) => item._id) || [];
 
-      // Find the Topics with ids:
-      const tracks = await Track.find({
-         category: {
+    // Find the Topics with ids:
+    const tracks = await Track.find({
+      category: {
+        $in: categoryIds,
+      },
+    }).session(mongoSession);
+
+    const trackIds = tracks?.map((item) => item._id) || [];
+
+    if (categoryIds?.length > 0) {
+      await Category.updateMany(
+        {
+          _id: {
             $in: categoryIds,
-         },
-      }).session(mongoSession);
+          },
+        },
+        {
+          $set: {
+            archivedAt: new Date(),
+            status: categoryStatus.ARCHIVED,
+          },
+        },
+        {
+          session: mongoSession,
+        },
+      );
+    }
 
-      const trackIds = tracks?.map((item) => item._id) || [];
+    if (trackIds?.length > 0) {
+      await Track.updateMany(
+        {
+          _id: {
+            $in: trackIds,
+          },
+        },
+        {
+          $set: {
+            archivedAt: new Date(),
+            status: trackStatus.ARCHIVED,
+          },
+        },
+        {
+          session: mongoSession,
+        },
+      );
+    }
 
-      if (categoryIds?.length > 0) {
-         await Category.updateMany(
-            {
-               _id: {
-                  $in: categoryIds,
-               },
-            },
-            {
-               $set: {
-                  archivedAt: new Date(),
-                  status: categoryStatus.ARCHIVED,
-               },
-            },
-            {
-               session: mongoSession,
-            },
-         );
-      }
+    await mongoSession.commitTransaction();
 
-      if (trackIds?.length > 0) {
-         await Track.updateMany(
-            {
-               _id: {
-                  $in: trackIds,
-               },
-            },
-            {
-               $set: {
-                  archivedAt: new Date(),
-                  status: "archived",
-               },
-            },
-            {
-               session: mongoSession,
-            },
-         );
-      }
-
-      await mongoSession.commitTransaction();
-
-      return collection;
-   } catch (error) {
-      await mongoSession.abortTransaction();
-      throw error;
-   } finally {
-      await mongoSession.endSession();
-   }
+    return collection;
+  } catch (error) {
+    await mongoSession.abortTransaction();
+    throw error;
+  } finally {
+    await mongoSession.endSession();
+  }
 };
 
 export const collectionServices = {
-   createCollection,
-   updateCollection,
-   getAllCollection,
-   getCollectionById,
-   deleteCollectionById,
-   getAllPublishedCollections,
-   markAsArchived,
-   markAsPublished,
+  createCollection,
+  updateCollection,
+  getAllCollection,
+  getCollectionById,
+  deleteCollectionById,
+  getAllPublishedCollections,
+  markAsArchived,
+  markAsPublished,
 };

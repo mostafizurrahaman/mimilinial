@@ -1,14 +1,18 @@
 import { Document, Types } from "mongoose";
+import type { TTrackStatusType } from "./track.constants";
 
 export interface ITrack {
   category: Types.ObjectId;
-  name: string;
+  nameEn: string;
+  nameBn: string;
   slug: string;
   description?: string | null;
   metaTitle?: string | null;
   metaDescription?: string | null;
-  isActive: boolean;
+  status: TTrackStatusType;
   author: Types.ObjectId;
+  publishedAt?: Date | null;
+  archivedAt?: Date | null;
 }
 
 export interface ITrackDoc extends Document, ITrack {}

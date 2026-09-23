@@ -17,73 +17,89 @@ const router: Router = express.Router();
 
 // 1. CREATE CATEGORY
 router.post(
-   "/",
-   multerFactory({
-      category: "image",
-      maxSizeInMB: 5,
-   }).fields([
-      {
-         name: "icon",
-         maxCount: 1,
-      },
-      {
-         name: "ogImage",
-         maxCount: 1,
-      },
-   ]),
-   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
-   validateRequest(categoryValidations.createCategorySchema),
-   categoryControllers.createCategory,
+  "/",
+  multerFactory({
+    category: "image",
+    maxSizeInMB: 5,
+  }).fields([
+    {
+      name: "icon",
+      maxCount: 1,
+    },
+    {
+      name: "ogImage",
+      maxCount: 1,
+    },
+  ]),
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(categoryValidations.createCategorySchema),
+  categoryControllers.createCategory,
 );
 
 // 2. UPDATE CATEGORY
 router.patch(
-   "/:id",
-   multerFactory({
-      category: "image",
-      maxSizeInMB: 5,
-   }).fields([
-      {
-         name: "icon",
-         maxCount: 1,
-      },
-      {
-         name: "ogImage",
-         maxCount: 1,
-      },
-   ]),
-   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
-   validateRequest(categoryValidations.updateCategorySchema),
-   categoryControllers.updateCategory,
+  "/:id",
+  multerFactory({
+    category: "image",
+    maxSizeInMB: 5,
+  }).fields([
+    {
+      name: "icon",
+      maxCount: 1,
+    },
+    {
+      name: "ogImage",
+      maxCount: 1,
+    },
+  ]),
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(categoryValidations.updateCategorySchema),
+  categoryControllers.updateCategory,
 );
 
 // 3. GET ALL CATEGORY
 router.get(
-   "/all",
-   validateRequest(categoryValidations.getAllCategorySchema),
-   categoryControllers.getAllCategory,
+  "/all",
+  validateRequest(categoryValidations.getAllCategorySchema),
+  categoryControllers.getAllCategory,
 );
 
 // 3.1 GET ALL ACTIVE CATEGORY
 router.get(
-   "/published",
-   validateRequest(categoryValidations.getAllPublishedCategorySchema),
-   categoryControllers.getAllPublishedCategory,
+  "/published",
+  validateRequest(categoryValidations.getAllPublishedCategorySchema),
+  categoryControllers.getAllPublishedCategory,
 );
 
 // 4. GET CATEGORY BY ID
 router.get(
-   "/:id",
-   validateRequest(categoryValidations.getCategoryByIdSchema),
-   categoryControllers.getCategoryById,
+  "/:id",
+  validateRequest(categoryValidations.getCategoryByIdSchema),
+  categoryControllers.getCategoryById,
 );
 
 // 5. DELETE CATEGORY BY ID
 router.delete(
-   "/:id",
-   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
-   validateRequest(categoryValidations.deleteCategoryByIdSchema),
-   categoryControllers.deleteCategoryById,
+  "/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(categoryValidations.deleteCategoryByIdSchema),
+  categoryControllers.deleteCategoryById,
+);
+
+// 6. Mark as Published:
+router.patch(
+  "/:id/published",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(categoryValidations.markCategoryAsPublishedSchema),
+  categoryControllers.markCategoryAsPublished,
+);
+
+// 7. Mark as Archived:
+router.patch(
+  "/:id/archived",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(categoryValidations.markCategoryAsPublishedSchema),
+  categoryControllers.markCategoryAsArchived,
 );
 
 export const categoryRoutes = router;
