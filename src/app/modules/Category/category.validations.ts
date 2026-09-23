@@ -30,7 +30,7 @@ const createCategorySchema = z.object({
 // 2. UPDATE CATEGORY
 const updateCategorySchema = z.object({
   params: z.object({
-    id: requiredMongooseId("Collection ID"),
+    id: requiredMongooseId("Category ID"),
   }),
   body: z
     .object({
@@ -72,14 +72,14 @@ const getAllPublishedCategorySchema = z.object({
 // 4. GET CATEGORY BY ID
 const getCategoryByIdSchema = z.object({
   params: z.object({
-    id: requiredMongooseId("Collection ID"),
+    id: requiredMongooseId("Category ID"),
   }),
 });
 
 // 5. DELETE CATEGORY BY ID
 const deleteCategoryByIdSchema = z.object({
   params: z.object({
-    id: requiredMongooseId("Collection ID"),
+    id: requiredMongooseId("Category ID"),
   }),
 });
 
@@ -105,6 +105,7 @@ export const categoryValidations = {
   deleteCategoryByIdSchema,
   getAllPublishedCategorySchema,
   markCategoryAsPublishedSchema,
+  markCategoryAsArchivedSchema,
 };
 
 export type TCreateCategoryPayloadType = z.infer<

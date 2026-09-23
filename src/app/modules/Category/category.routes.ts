@@ -98,7 +98,7 @@ router.patch(
 router.patch(
   "/:id/archived",
   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
-  validateRequest(categoryValidations.markCategoryAsPublishedSchema),
+  validateRequest(categoryValidations.markCategoryAsArchivedSchema),
   categoryControllers.markCategoryAsArchived,
 );
 

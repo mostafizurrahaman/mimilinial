@@ -1,13 +1,14 @@
 import { Schema, model } from "mongoose";
 import type { ISubjectDoc } from "./subject.interfaces";
+import { SUBJECT_STATUS, SUBJECT_VALUES } from "./subject.constants";
 
 const subjectSchema = new Schema<ISubjectDoc>(
    {
-      name_bn: {
+      nameBn: {
          type: String,
          required: true,
       },
-      name_en: {
+      nameEn: {
          type: String,
          required: true,
       },
@@ -51,10 +52,20 @@ const subjectSchema = new Schema<ISubjectDoc>(
          required: true,
          default: false,
       },
-      isActive: {
-         type: Boolean,
-         required: true,
-         default: true,
+      status: {
+         type: String,
+         enum: SUBJECT_VALUES,
+         default: SUBJECT_STATUS.DRAFT,
+      },
+      publishedAt: {
+         type: Date,
+         allowNull: true,
+         default: null,
+      },
+      archivedAt: {
+         type: Date,
+         allowNull: true,
+         default: null,
       },
       metaTitle: {
          type: String,

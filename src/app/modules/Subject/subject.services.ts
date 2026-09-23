@@ -4,7 +4,7 @@ import type {
   TCreateSubjectPayloadType,
   TUpdateSubjectPayloadType,
   TGetAllSubjectQueryParamsType,
-  TGetAllActiveSubjectQueryParamsType,
+  TGetAllPublishedSubjectQueryParamsType,
 } from "./subject.validations";
 import {
   AppError,
@@ -14,6 +14,7 @@ import {
 } from "../../errors";
 import { Subject } from "./subject.model";
 import {
+  SUBJECT_STATUS,
   subjectProjections,
   subjectSearchableFields,
   subjectSortableFields,
@@ -32,11 +33,10 @@ const createSubject = async (
   files: ISubjectFiles,
 ) => {
   const {
-    name_bn,
-    name_en,
+    nameBn,
+    nameEn,
     code,
     colorCode,
-    isActive,
     isFeatured,
     sortOrder,
     description,
@@ -54,7 +54,7 @@ const createSubject = async (
   }
 
   // Create Slug:
-  const slug = createSlug(name_en);
+  const slug = createSlug(nameEn);
   const duplicateSlug = await Subject.findOne({
     slug,
   });
@@ -102,16 +102,16 @@ const createSubject = async (
 
     // Create the subject:
     const sub = await Subject.create({
-      name_bn,
-      name_en,
+      nameBn,
+      nameEn,
       slug,
       code,
       colorCode,
       icon: iconUrl,
       description,
       sortOrder,
-      isActive,
       isFeatured,
+      status: SUBJECT_STATUS.DRAFT,
       metaTitle,
       metaDescription,
       ogImage: ogImageUrl,
@@ -154,8 +154,8 @@ const updateSubject = async (
 
   let slug = subject.slug;
   // Check name changed:
-  if (payload.name_en !== undefined && payload.name_en !== subject.name_en) {
-    const newSlug = createSlug(payload.name_en);
+  if (payload.nameEn !== undefined && payload.nameEn !== subject.nameEn) {
+    const newSlug = createSlug(payload.nameEn);
 
     const duplicateSlug = await Subject.findOne({
       _id: {
@@ -234,7 +234,7 @@ const updateSubject = async (
 
 // 3. GET ALL SUBJECT
 const getAllSubject = async (query: TGetAllSubjectQueryParamsType) => {
-  const { isFeatured, isActive, projection } = query;
+  const { isFeatured, status, projection } = query;
   const { page, limit, skip, searchTerm, sortOrder, sortBy, fromDate, toDate } =
     formatQuery(query, subjectSortableFields);
 
@@ -242,8 +242,8 @@ const getAllSubject = async (query: TGetAllSubjectQueryParamsType) => {
 
   const matchStage: PipelineStage.Match = { $match: {} };
 
-  if (isActive !== undefined) {
-    matchStage.$match["isActive"] = isActive;
+  if (status !== undefined) {
+    matchStage.$match["status"] = status;
   }
 
   if (isFeatured !== undefined) {
@@ -302,12 +302,12 @@ const getAllSubject = async (query: TGetAllSubjectQueryParamsType) => {
 };
 
 // 3.1 Get active all subject:
-const getAllActiveSubject = async (
-  query: TGetAllActiveSubjectQueryParamsType,
+const getAllPublishedSubject = async (
+  query: TGetAllPublishedSubjectQueryParamsType,
 ) => {
   return getAllSubject({
     ...query,
-    isActive: true,
+    status: SUBJECT_STATUS.PUBLISHED,
   });
 };
 
@@ -319,8 +319,8 @@ const getSubjectById = async (id: string) => {
     throw new NotFoundError("Subject not found");
   }
 
-  if (!result.isActive) {
-    throw new BadRequest("The subject is not active.");
+  if (result.status !== SUBJECT_STATUS.PUBLISHED) {
+    throw new BadRequest("The subject is not published.");
   }
 
   return result;
@@ -334,8 +334,8 @@ const getSubjectBySlug = async (slug: string) => {
     throw new NotFoundError("Subject not found");
   }
 
-  if (!result.isActive) {
-    throw new BadRequest("The subject is not active.");
+  if (result.status !== SUBJECT_STATUS.PUBLISHED) {
+    throw new BadRequest("The subject is not published.");
   }
   return result;
 };
@@ -358,6 +358,54 @@ const deleteSubjectById = async (id: string) => {
   return result;
 };
 
+// 6. Mark As Published:
+const markAsPublished = async (id: string) => {
+  const subject = await Subject.findById(id);
+
+  if (!subject) {
+    throw new NotFoundError("Subject not found.");
+  }
+
+  if (subject.status === SUBJECT_STATUS.ARCHIVED) {
+    throw new BadRequest("You cannot publish an archived subject.");
+  }
+
+  if (subject.status === SUBJECT_STATUS.PUBLISHED) {
+    throw new BadRequest("This subject has already been published.");
+  }
+
+  subject.status = SUBJECT_STATUS.PUBLISHED;
+  subject.publishedAt = new Date();
+
+  await subject.save({ validateBeforeSave: true });
+
+  return subject;
+};
+
+// 7. Mark As Archived:
+const markAsArchived = async (id: string) => {
+  const subject = await Subject.findById(id);
+
+  if (!subject) {
+    throw new NotFoundError("Subject not found.");
+  }
+
+  if (subject.status === SUBJECT_STATUS.DRAFT) {
+    throw new BadRequest("You cannot archive a drafted subject.");
+  }
+
+  if (subject.status === SUBJECT_STATUS.ARCHIVED) {
+    throw new BadRequest("This subject has already been archived.");
+  }
+
+  subject.status = SUBJECT_STATUS.ARCHIVED;
+  subject.archivedAt = new Date();
+
+  await subject.save({ validateBeforeSave: true });
+
+  return subject;
+};
+
 export const subjectServices = {
   createSubject,
   updateSubject,
@@ -365,5 +413,7 @@ export const subjectServices = {
   getSubjectById,
   getSubjectBySlug,
   deleteSubjectById,
-  getAllActiveSubject,
+  getAllPublishedSubject,
+  markAsPublished,
+  markAsArchived,
 };

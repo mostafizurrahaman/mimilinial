@@ -61,7 +61,7 @@ router.patch(
 router.patch(
    "/:id/published",
    auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
-   validateRequest(collectionValidations.getCollectionByIdSchema),
+   validateRequest(collectionValidations.markCollectionAsPublishedSchema),
    collectionControllers.markAsPublished,
 );
 
@@ -69,7 +69,7 @@ router.patch(
 router.patch(
    "/:id/archived",
    auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
-   validateRequest(collectionValidations.getCollectionByIdSchema),
+   validateRequest(collectionValidations.markCollectionAsArchivedSchema),
    collectionControllers.markAsArchived,
 );
 

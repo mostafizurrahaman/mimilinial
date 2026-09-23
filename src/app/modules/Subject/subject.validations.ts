@@ -8,8 +8,10 @@ import {
    positiveNumber,
    requiredStrBoolean,
    requiredMongooseId,
+   enumString,
 } from "../../utils";
 import {
+   SUBJECT_VALUES,
    subjectProjectTypes,
    subjectSortableFields,
 } from "./subject.constants";
@@ -18,8 +20,8 @@ import { sortOrderValues } from "../../constants";
 // 1. CREATE SUBJECT
 const createSubjectSchema = z.object({
    body: z.object({
-      name_bn: requiredString("Name in Bengali"),
-      name_en: requiredString("Name in english"),
+      nameBn: requiredString("Name in Bengali"),
+      nameEn: requiredString("Name in english"),
       code: requiredString("Subject Code").regex(
          /^[A-Z]{2,5}-[0-9]{3}$/,
          "Subject code must contain 2–5 uppercase letters, followed by a hyphen and 3 digits (e.g., ENG-101).",
@@ -32,7 +34,7 @@ const createSubjectSchema = z.object({
          error: "Sort Order should be positive number.",
       }),
       isFeatured: requiredStrBoolean("Is Featured").default(false),
-      isActive: requiredStrBoolean("is Active").default(true),
+      status: enumString(SUBJECT_VALUES, "Status").optional(),
       metaTitle: requiredString("Meta title")
          .max(60, {
             error: "Meta title must not exceed 60 characters.",
@@ -52,11 +54,11 @@ const createSubjectSchema = z.object({
 // 2. UPDATE SUBJECT
 const updateSubjectSchema = z.object({
    params: z.object({
-      id: requiredString("ID"),
+      id: requiredMongooseId("Subject ID"),
    }),
    body: z.object({
-      name_bn: optionalString("Name in Bengali"),
-      name_en: optionalString("Name in english"),
+      nameBn: optionalString("Name in Bengali"),
+      nameEn: optionalString("Name in english"),
       code: requiredString("Subject Code")
          .regex(
             /^[A-Z]{2,5}-[0-9]{3}$/,
@@ -75,7 +77,7 @@ const updateSubjectSchema = z.object({
          })
          .optional(),
       isFeatured: requiredStrBoolean("Is Featured").optional(),
-      isActive: requiredStrBoolean("is Active").optional(),
+      status: optionalEnumString(SUBJECT_VALUES, "Status").optional(),
       metaTitle: requiredString("Meta title")
          .max(60, {
             error: "Meta title must not exceed 60 characters.",
@@ -101,15 +103,15 @@ const getAllSubjectSchema = z.object({
       sortOrder: optionalEnumString(sortOrderValues, "Sort order"),
       sortBy: optionalEnumString(subjectSortableFields, "Sort by"),
       isFeatured: requiredStrBoolean("Is featured").optional(),
-      isActive: requiredStrBoolean("Is active").optional(),
+      status: optionalEnumString(SUBJECT_VALUES, "Status").optional(),
       fromDate: optionalDate("From date"),
       toDate: optionalDate("To date"),
       projection: optionalEnumString(subjectProjectTypes, "projection"),
    }),
 });
 
-// 3.1 GET ALL Active SUBJECT
-const getAllActiveSubjectSchema = z.object({
+// 3.1 GET ALL Published SUBJECT
+const getAllPublishedSubjectSchema = z.object({
    query: z.object({
       page: optionalNumber("Page"),
       limit: optionalNumber("Limit"),
@@ -126,7 +128,7 @@ const getAllActiveSubjectSchema = z.object({
 // 4. GET SUBJECT BY ID
 const getSubjectByIdSchema = z.object({
    params: z.object({
-      id: requiredMongooseId("ID"),
+      id: requiredMongooseId("Subject ID"),
    }),
 });
 
@@ -140,7 +142,21 @@ const getSubjectBySlugSchema = z.object({
 // 5. DELETE SUBJECT BY ID
 const deleteSubjectByIdSchema = z.object({
    params: z.object({
-      id: requiredMongooseId("ID"),
+      id: requiredMongooseId("Subject ID"),
+   }),
+});
+
+// 6. Mark as Published
+const markSubjectAsPublishedSchema = z.object({
+   params: z.object({
+      id: requiredMongooseId("Subject ID"),
+   }),
+});
+
+// 7. Mark as Archived
+const markSubjectAsArchivedSchema = z.object({
+   params: z.object({
+      id: requiredMongooseId("Subject ID"),
    }),
 });
 
@@ -151,7 +167,9 @@ export const subjectValidations = {
    getSubjectByIdSchema,
    deleteSubjectByIdSchema,
    getSubjectBySlugSchema,
-   getAllActiveSubjectSchema,
+   getAllPublishedSubjectSchema,
+   markSubjectAsPublishedSchema,
+   markSubjectAsArchivedSchema,
 };
 
 export type TCreateSubjectPayloadType = z.infer<
@@ -163,8 +181,8 @@ export type TUpdateSubjectPayloadType = z.infer<
 export type TGetAllSubjectQueryParamsType = z.infer<
    typeof getAllSubjectSchema.shape.query
 >;
-export type TGetAllActiveSubjectQueryParamsType = z.infer<
-   typeof getAllActiveSubjectSchema.shape.query
+export type TGetAllPublishedSubjectQueryParamsType = z.infer<
+   typeof getAllPublishedSubjectSchema.shape.query
 >;
 export type TGetSubjectByIdParamsType = z.infer<
    typeof getSubjectByIdSchema.shape.params

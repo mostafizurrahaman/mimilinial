@@ -44,12 +44,12 @@ const getAllSubject = catchAsync(async (req, res) => {
    });
 });
 
-const getAllActiveSubject = catchAsync(async (req, res) => {
-   const result = await subjectServices.getAllActiveSubject(req.validQuery);
+const getAllPublishedSubject = catchAsync(async (req, res) => {
+   const result = await subjectServices.getAllPublishedSubject(req.validQuery);
 
    sendResponse(res, {
       statusCode: httpStatus.OK,
-      message: "All active subjects are retrieved successfully!",
+      message: "All published subjects are retrieved successfully!",
       data: result.data,
       meta: result.meta,
    });
@@ -92,6 +92,30 @@ const deleteSubjectById = catchAsync(async (req, res) => {
    });
 });
 
+// 6. Mark as Published
+const markAsPublished = catchAsync(async (req, res) => {
+   const result = await subjectServices.markAsPublished(
+      req.params.id as string,
+   );
+
+   sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: "The subject marked as published successfully!",
+      data: result,
+   });
+});
+
+// 7. Mark as Archived
+const markAsArchived = catchAsync(async (req, res) => {
+   const result = await subjectServices.markAsArchived(req.params.id as string);
+
+   sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: "The subject marked as archived successfully!",
+      data: result,
+   });
+});
+
 export const subjectControllers = {
    createSubject,
    updateSubject,
@@ -99,5 +123,7 @@ export const subjectControllers = {
    getSubjectById,
    deleteSubjectById,
    getSubjectBySlug,
-   getAllActiveSubject,
+   getAllPublishedSubject,
+   markAsPublished,
+   markAsArchived,
 };

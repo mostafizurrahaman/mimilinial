@@ -1,10 +1,8 @@
 import httpStatus from "http-status";
 import type { PipelineStage } from "mongoose";
-import type {
-  TCreateOtpPayloadType,
-  TUpdateOtpPayloadType,
-  TGetAllOtpQueryParamsType,
-} from "./otp.validations";
+type TCreateOtpPayloadType = any;
+type TUpdateOtpPayloadType = any;
+type TGetAllOtpQueryParamsType = any;
 import { AppError } from "@/app/errors";
 import { Otp } from "./otp.model";
 import { otpSearchableFields } from "./otp.constants";

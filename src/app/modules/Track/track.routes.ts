@@ -38,9 +38,9 @@ router.get(
 
 // 3. GET ALL TRACK
 router.get(
-   "/active",
-   validateRequest(trackValidations.getAllTrackSchema),
-   trackControllers.getAllActiveTracks,
+   "/published",
+   validateRequest(trackValidations.getAllPublishedTrackSchema),
+   trackControllers.getAllPublishedTracks,
 );
 
 // 4. GET TRACK BY ID
@@ -56,6 +56,22 @@ router.delete(
    auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
    validateRequest(trackValidations.deleteTrackByIdSchema),
    trackControllers.deleteTrackById,
+);
+
+// 6. Mark as Published
+router.patch(
+   "/:id/published",
+   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+   validateRequest(trackValidations.markTrackAsPublishedSchema),
+   trackControllers.markAsPublished,
+);
+
+// 7. Mark as Archived
+router.patch(
+   "/:id/archived",
+   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+   validateRequest(trackValidations.markTrackAsArchivedSchema),
+   trackControllers.markAsArchived,
 );
 
 export const trackRoutes = router;

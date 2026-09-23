@@ -46,7 +46,7 @@ const createCollectionSchema = z.object({
 // 2. UPDATE COLLECTION
 const updateCollectionSchema = z.object({
    params: z.object({
-      id: requiredMongooseId("ID"),
+      id: requiredMongooseId("Collection ID"),
    }),
    body: z
       .object({
@@ -106,6 +106,20 @@ const deleteCollectionByIdSchema = z.object({
    }),
 });
 
+// 6. Mark as published:
+const markCollectionAsPublishedSchema = z.object({
+   params: z.object({
+      id: requiredMongooseId("Collection ID"),
+   }),
+});
+
+// 7. Mark as Archived:
+const markCollectionAsArchivedSchema = z.object({
+   params: z.object({
+      id: requiredMongooseId("Collection ID"),
+   }),
+});
+
 export const collectionValidations = {
    createCollectionSchema,
    updateCollectionSchema,
@@ -113,6 +127,8 @@ export const collectionValidations = {
    getCollectionByIdSchema,
    deleteCollectionByIdSchema,
    getAllPublishedCollectionSchema,
+   markCollectionAsPublishedSchema,
+   markCollectionAsArchivedSchema,
 };
 
 export type TCreateCollectionPayloadType = z.infer<

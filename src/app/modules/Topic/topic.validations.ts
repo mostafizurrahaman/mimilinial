@@ -27,7 +27,6 @@ const createTopicSchema = z.object({
       })
       .optional()
       .default(0),
-    status: enumString(TOPIC_VALUES, "Topic status"),
     metaTitle: optionalString("Meta title").nullish(),
     metaDescription: optionalString("Meta description").nullish(),
   }),
@@ -36,7 +35,7 @@ const createTopicSchema = z.object({
 // 2. UPDATE TOPIC
 const updateTopicSchema = z.object({
   params: z.object({
-    id: requiredString("ID"),
+    id: requiredMongooseId("Topic ID"),
   }),
   body: z.object({
     subject: requiredMongooseId("Subject").optional(),
@@ -62,7 +61,7 @@ const getAllTopicSchema = z.object({
   query: z.object({
     page: optionalNumber("Page"),
     limit: optionalNumber("Limit"),
-    slug: requiredString("Slug"),
+    slug: optionalString("Slug").nullish(),
     subjectId: requiredMongooseId("Subject ID").optional(),
     parentTopicId: requiredMongooseId("Parent Topic ID").optional(),
     searchTerm: optionalString("Search term"),
@@ -74,17 +73,48 @@ const getAllTopicSchema = z.object({
   }),
 });
 
+// 3.1 GET ALL PUBLISHED TOPIC
+const getAllPublishedTopicSchema = z.object({
+  query: z.object({
+    page: optionalNumber("Page"),
+    limit: optionalNumber("Limit"),
+    slug: optionalString("Slug"),
+    subjectId: requiredMongooseId("Subject ID").optional(),
+    parentTopicId: requiredMongooseId("Parent Topic ID").optional(),
+    searchTerm: optionalString("Search term"),
+    sortOrder: optionalEnumString(sortOrderValues, "Sort order"),
+    sortBy: optionalEnumString(topicSortableFields, "Sort by"),
+    status: optionalEnumString(TOPIC_VALUES, "Status").optional(),
+    fromDate: optionalDate("From date"),
+    toDate: optionalDate("To date"),
+  }),
+});
+
 // 4. GET TOPIC BY ID
 const getTopicByIdSchema = z.object({
   params: z.object({
-    id: requiredString("ID"),
+    id: requiredMongooseId("Topic ID"),
   }),
 });
 
 // 5. DELETE TOPIC BY ID
 const deleteTopicByIdSchema = z.object({
   params: z.object({
-    id: requiredString("ID"),
+    id: requiredMongooseId("Topic ID"),
+  }),
+});
+
+// 6. Mark as Published
+const markTopicAsPublishedSchema = z.object({
+  params: z.object({
+    id: requiredMongooseId("Topic ID"),
+  }),
+});
+
+// 7. Mark as Archived
+const markTopicAsArchivedSchema = z.object({
+  params: z.object({
+    id: requiredMongooseId("Topic ID"),
   }),
 });
 
@@ -92,8 +122,11 @@ export const topicValidations = {
   createTopicSchema,
   updateTopicSchema,
   getAllTopicSchema,
+  getAllPublishedTopicSchema,
   getTopicByIdSchema,
   deleteTopicByIdSchema,
+  markTopicAsPublishedSchema,
+  markTopicAsArchivedSchema,
 };
 
 export type TCreateTopicPayloadType = z.infer<
@@ -108,6 +141,6 @@ export type TGetAllTopicQueryParamsType = z.infer<
 export type TGetTopicByIdParamsType = z.infer<
   typeof getTopicByIdSchema.shape.params
 >;
-export type TDeleteTopicByIdParamsType = z.infer<
-  typeof deleteTopicByIdSchema.shape.params
+export type TGetAllPublishedTopicQueryParamsType = z.infer<
+  typeof getAllPublishedTopicSchema.shape.query
 >;

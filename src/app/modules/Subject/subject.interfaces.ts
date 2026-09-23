@@ -1,9 +1,10 @@
 import type { TMulterFile } from "@/app/interfaces/multer.types";
 import { Document, Types } from "mongoose";
+import type { TSubjectStatus } from "./subject.constants";
 
 export interface ISubject {
-   name_bn: string;
-   name_en: string;
+   nameBn: string;
+   nameEn: string;
    slug: string;
    code: string;
    description?: string | null;
@@ -11,10 +12,12 @@ export interface ISubject {
    icon?: string | null;
    sortOrder: number;
    isFeatured: boolean;
-   isActive: boolean;
+   status: TSubjectStatus;
    metaTitle?: string | null;
    metaDescription?: string | null;
    ogImage?: string | null;
+   publishedAt?: Date | null;
+   archivedAt?: Date | null;
    author: Types.ObjectId;
 }
 
