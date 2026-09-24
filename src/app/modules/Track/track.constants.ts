@@ -39,7 +39,6 @@ export const trackProjection = {
     status: "$status",
     categoryStatus: "$categoryDetails.status",
     collectionStatus: "$categoryDetails.collectionStatus",
-    icon: { $ifNull: ["$icon", null] },
   },
 
   list: {
@@ -54,7 +53,6 @@ export const trackProjection = {
     categoryStatus: "$categoryDetails.status",
     collectionStatus: "$categoryDetails.collectionStatus",
 
-    icon: { $ifNull: ["$icon", null] },
     categoryNameEn: "$categoryDetails.nameEn",
     categoryNameBn: "$categoryDetails.nameBn",
 
@@ -73,7 +71,6 @@ export const trackProjection = {
     trackId: "$_id",
     categoryId: "$categoryDetails._id",
     collectionId: "$categoryDetails.collectionId",
-    icon: { $ifNull: ["$icon", null] },
     nameBn: "$nameBn",
     nameEn: "$nameEn",
     status: "$status",
@@ -82,7 +79,6 @@ export const trackProjection = {
     description: { $ifNull: ["$description", null] },
     metaTitle: { $ifNull: ["$metaTitle", null] },
     metaDescription: { $ifNull: ["$metaDescription", null] },
-    ogImage: { $ifNull: ["$ogImage", null] },
     author: "$author",
     categoryNameEn: "$categoryDetails.nameEn",
     categoryNameBn: "$categoryDetails.nameBn",

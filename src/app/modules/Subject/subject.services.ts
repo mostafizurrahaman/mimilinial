@@ -319,24 +319,25 @@ const getSubjectById = async (id: string) => {
     throw new NotFoundError("Subject not found");
   }
 
-  if (result.status !== SUBJECT_STATUS.PUBLISHED) {
-    throw new BadRequest("The subject is not published.");
-  }
+  // if (result.status !== SUBJECT_STATUS.PUBLISHED) {
+  //   throw new BadRequest("The subject is not published.");
+  // }
 
   return result;
 };
 
 // 4.1 Get Subject by slug:
 const getSubjectBySlug = async (slug: string) => {
+  console.log({ slug });
   const result = await Subject.findOne({ slug });
 
   if (!result) {
     throw new NotFoundError("Subject not found");
   }
 
-  if (result.status !== SUBJECT_STATUS.PUBLISHED) {
-    throw new BadRequest("The subject is not published.");
-  }
+  // if (result.status !== SUBJECT_STATUS.PUBLISHED) {
+  //   throw new BadRequest("The subject is not published.");
+  // }
   return result;
 };
 
@@ -399,11 +400,42 @@ const markAsArchived = async (id: string) => {
   }
 
   subject.status = SUBJECT_STATUS.ARCHIVED;
+  subject.isFeatured = false;
   subject.archivedAt = new Date();
 
   await subject.save({ validateBeforeSave: true });
 
   return subject;
+};
+
+// 8. Toggle Featured
+const toggleFeatured = async (id: string) => {
+  const subject = await Subject.findById(id);
+
+  // Subject not found
+  if (!subject) {
+    throw new NotFoundError("Subject not found.");
+  }
+
+  // Draft subject cannot be featured
+  if (subject.status === SUBJECT_STATUS.DRAFT && subject.isFeatured === false) {
+    throw new BadRequest("You cannot feature a draft subject.");
+  }
+
+  // Archived subject cannot be toggled
+  if (subject.status === SUBJECT_STATUS.ARCHIVED) {
+    throw new BadRequest("You cannot toggle featured for an archived subject.");
+  }
+
+  subject.isFeatured = !subject.isFeatured;
+
+  await subject.save({ validateBeforeSave: true });
+
+  return {
+    message: subject?.isFeatured
+      ? "Subject has been marked as featured."
+      : "Subject has been removed from featured.",
+  };
 };
 
 export const subjectServices = {
@@ -416,4 +448,5 @@ export const subjectServices = {
   getAllPublishedSubject,
   markAsPublished,
   markAsArchived,
+  toggleFeatured,
 };
