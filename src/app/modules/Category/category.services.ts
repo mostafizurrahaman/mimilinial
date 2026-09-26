@@ -466,55 +466,25 @@ const markAsArchived = async (id: string) => {
   category.archivedAt = new Date();
 
   // 5. Find Track under this category:
-  const tracks = await Track.find({
+  const tracks = await Track.countDocuments({
     category: category?._id,
     status: {
-      $in: [trackStatus.DRAFT, trackStatus.PUBLISHED],
+      $ne: trackStatus.ARCHIVED,
     },
-  })
-    .select({
-      _id: 1,
-    })
-    .lean();
+  });
 
-  // 6. Get Track ids:
-  const trackIds = tracks?.map((item) => item?._id).filter(Boolean);
-
-  const mongoSession = await mongoose.startSession();
-
-  try {
-    mongoSession.startTransaction();
-
-    // 1. Update the category
-    await category.save({
-      session: mongoSession,
-    });
-
-    // 2. Move all draft and published tracked to archived:
-    await Track.updateMany(
-      {
-        _id: {
-          $in: trackIds,
-        },
-      },
-      {
-        $set: {
-          status: trackStatus.ARCHIVED,
-          archivedAt: new Date(),
-        },
-      },
-      {
-        session: mongoSession,
-      },
+  if (tracks > 0) {
+    throw new BadRequest(
+      "Cannot archive a category that has active tracks. Archive them first.",
     );
-
-    await mongoSession.commitTransaction();
-  } catch (err) {
-    await mongoSession.abortTransaction();
-    throw err;
-  } finally {
-    await mongoSession.endSession();
   }
+
+  // 1. Update the category
+  await category.save({
+    validateBeforeSave: true,
+  });
+
+  return category;
 };
 export const categoryServices = {
   createCategory,

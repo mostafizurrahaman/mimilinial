@@ -25,6 +25,7 @@ import { createSlug, formatQuery } from "@/app/utils";
 import uploadFileIntoCloudinary from "@/app/utils/cloudinary/upload-file";
 import { File_FOLDER_NAME } from "@/app/constants/folder_name";
 import { deleteFilesByUrls } from "@/app/utils/cloudinary/delete-files";
+import { Topic, TOPIC_STATUS } from "../Topic";
 
 // 1. CREATE SUBJECT
 const createSubject = async (
@@ -399,11 +400,22 @@ const markAsArchived = async (id: string) => {
     throw new BadRequest("This subject has already been archived.");
   }
 
+  const childTopics = await Topic.countDocuments({
+    subject: subject?._id,
+    status: {
+      $ne: TOPIC_STATUS.ARCHIVED,
+    },
+  });
+
+  if (childTopics > 0) {
+    throw new BadRequest(
+      "Cannot archive a subject that has active topics. Archive them first.",
+    );
+  }
+
   subject.status = SUBJECT_STATUS.ARCHIVED;
   subject.isFeatured = false;
   subject.archivedAt = new Date();
-
-  //TODO: Topics should be archived under this subject:
 
   await subject.save({ validateBeforeSave: true });
 
