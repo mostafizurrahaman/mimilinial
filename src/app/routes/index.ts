@@ -5,6 +5,7 @@ import { collectionRoutes } from "../modules/Collection";
 import { categoryRoutes } from "../modules/Category";
 import { trackRoutes } from "../modules/Track";
 import { subjectRoutes } from "../modules/Subject";
+import { topicRoutes } from "../modules/Topic";
 
 const router: Router = express();
 
@@ -32,6 +33,10 @@ const routes = [
   {
     path: "/subject",
     route: subjectRoutes,
+  },
+  {
+    path: "/topic",
+    route: topicRoutes,
   },
 ];
 

@@ -9,8 +9,13 @@ import {
   requiredNumber,
   enumString,
 } from "../../utils";
-import { TOPIC_VALUES, topicSortableFields } from "./topic.constants";
+import {
+  TOPIC_STATUS_VALUES,
+  TOPIC_PROJECTION_VALUES,
+  topicSortableFields,
+} from "./topic.constants";
 import { sortOrderValues } from "../../constants";
+import { SUBJECT_STATUS_VALUES } from "../Subject";
 
 // 1. CREATE TOPIC
 const createTopicSchema = z.object({
@@ -50,7 +55,7 @@ const updateTopicSchema = z.object({
       })
       .optional()
       .default(0),
-    status: optionalEnumString(TOPIC_VALUES, "Topic status"),
+    status: optionalEnumString(TOPIC_STATUS_VALUES, "Topic status"),
     metaTitle: optionalString("Meta title").nullish(),
     metaDescription: optionalString("Meta description").nullish(),
   }),
@@ -67,26 +72,27 @@ const getAllTopicSchema = z.object({
     searchTerm: optionalString("Search term"),
     sortOrder: optionalEnumString(sortOrderValues, "Sort order"),
     sortBy: optionalEnumString(topicSortableFields, "Sort by"),
-    status: optionalEnumString(TOPIC_VALUES, "Status"),
+    status: optionalEnumString(TOPIC_STATUS_VALUES, "Status"),
+    parentTopicStatus: optionalEnumString(
+      TOPIC_STATUS_VALUES,
+      "Parent topic status",
+    ),
+    subjectStatus: optionalEnumString(SUBJECT_STATUS_VALUES, "Subject Status"),
     fromDate: optionalDate("From date"),
     toDate: optionalDate("To date"),
+    projection: optionalEnumString(
+      TOPIC_PROJECTION_VALUES,
+      "Topic Projection values",
+    ).default("details"),
   }),
 });
 
 // 3.1 GET ALL PUBLISHED TOPIC
 const getAllPublishedTopicSchema = z.object({
-  query: z.object({
-    page: optionalNumber("Page"),
-    limit: optionalNumber("Limit"),
-    slug: optionalString("Slug"),
-    subjectId: requiredMongooseId("Subject ID").optional(),
-    parentTopicId: requiredMongooseId("Parent Topic ID").optional(),
-    searchTerm: optionalString("Search term"),
-    sortOrder: optionalEnumString(sortOrderValues, "Sort order"),
-    sortBy: optionalEnumString(topicSortableFields, "Sort by"),
-    status: optionalEnumString(TOPIC_VALUES, "Status").optional(),
-    fromDate: optionalDate("From date"),
-    toDate: optionalDate("To date"),
+  query: getAllTopicSchema.shape.query.omit({
+    status: true,
+    parentTopicStatus: true,
+    subjectStatus: true,
   }),
 });
 

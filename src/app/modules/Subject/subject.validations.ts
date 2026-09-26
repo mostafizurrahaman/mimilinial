@@ -11,7 +11,7 @@ import {
   enumString,
 } from "../../utils";
 import {
-  SUBJECT_VALUES,
+  SUBJECT_STATUS_VALUES,
   subjectProjectTypes,
   subjectSortableFields,
 } from "./subject.constants";
@@ -34,7 +34,7 @@ const createSubjectSchema = z.object({
       error: "Sort Order should be positive number.",
     }),
     isFeatured: requiredStrBoolean("Is Featured").default(false),
-    status: enumString(SUBJECT_VALUES, "Status").optional(),
+    status: enumString(SUBJECT_STATUS_VALUES, "Status").optional(),
     metaTitle: requiredString("Meta title")
       .max(60, {
         error: "Meta title must not exceed 60 characters.",
@@ -77,7 +77,7 @@ const updateSubjectSchema = z.object({
       })
       .optional(),
     isFeatured: requiredStrBoolean("Is Featured").optional(),
-    status: optionalEnumString(SUBJECT_VALUES, "Status").optional(),
+    status: optionalEnumString(SUBJECT_STATUS_VALUES, "Status").optional(),
     metaTitle: requiredString("Meta title")
       .max(60, {
         error: "Meta title must not exceed 60 characters.",
@@ -103,7 +103,7 @@ const getAllSubjectSchema = z.object({
     sortOrder: optionalEnumString(sortOrderValues, "Sort order"),
     sortBy: optionalEnumString(subjectSortableFields, "Sort by"),
     isFeatured: requiredStrBoolean("Is featured").optional(),
-    status: optionalEnumString(SUBJECT_VALUES, "Status").optional(),
+    status: optionalEnumString(SUBJECT_STATUS_VALUES, "Status").optional(),
     fromDate: optionalDate("From date"),
     toDate: optionalDate("To date"),
     projection: optionalEnumString(subjectProjectTypes, "projection"),

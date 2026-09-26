@@ -403,6 +403,8 @@ const markAsArchived = async (id: string) => {
   subject.isFeatured = false;
   subject.archivedAt = new Date();
 
+  //TODO: Topics should be archived under this subject:
+
   await subject.save({ validateBeforeSave: true });
 
   return subject;

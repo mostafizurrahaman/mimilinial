@@ -1,6 +1,6 @@
 import { Schema, Types, model } from "mongoose";
 import type { ITopicDoc } from "./topic.interfaces";
-import { TOPIC_STATUS, TOPIC_VALUES } from "./topic.constants";
+import { TOPIC_STATUS, TOPIC_STATUS_VALUES } from "./topic.constants";
 
 const topicSchema = new Schema<ITopicDoc>(
   {
@@ -9,14 +9,12 @@ const topicSchema = new Schema<ITopicDoc>(
       ref: "Subject",
       required: true,
     },
-
     parentTopic: {
       type: Schema.Types.ObjectId,
       ref: "Topic",
       allowNull: true,
       default: null,
     },
-
     nameBn: {
       type: String,
       required: true,
@@ -57,7 +55,7 @@ const topicSchema = new Schema<ITopicDoc>(
     },
     status: {
       type: String,
-      enum: TOPIC_VALUES,
+      enum: TOPIC_STATUS_VALUES,
       default: TOPIC_STATUS.DRAFT,
     },
     metaTitle: {
