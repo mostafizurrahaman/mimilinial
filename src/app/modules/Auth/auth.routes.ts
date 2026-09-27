@@ -8,62 +8,62 @@ import { authControllers } from "./auth.controllers";
 const router: Router = express.Router();
 
 router.post(
-   "/signup",
-   multerFactory({
-      category: "image",
-      maxSizeInMB: 10,
-   }).single("profileImage"),
-   validateRequest(authValidations.createUserSchema),
-   authControllers.createUser,
+  "/signup",
+  multerFactory({
+    category: "image",
+    maxSizeInMB: 10,
+  }).single("profileImage"),
+  validateRequest(authValidations.createUserSchema),
+  authControllers.createUser,
 );
 
 router.post(
-   "/resend-signup-otp",
-   validateRequest(authValidations.resendSignupOTPSchema),
-   authControllers.resendSignupOTP,
+  "/resend-signup-otp",
+  validateRequest(authValidations.resendSignupOTPSchema),
+  authControllers.resendSignupOTP,
 );
 
 router.post(
-   "/verify-signup-otp",
-   validateRequest(authValidations.verifySignupOTPSchema),
-   authControllers.verifySignupOTP,
+  "/verify-signup-otp",
+  validateRequest(authValidations.verifySignupOTPSchema),
+  authControllers.verifySignupOTP,
 );
 
 router.post(
-   "/login",
-   validateRequest(authValidations.loginSchema),
-   authControllers.login,
+  "/login",
+  validateRequest(authValidations.loginSchema),
+  authControllers.login,
 );
 
 router.post(
-   "/forgot-password",
-   validateRequest(authValidations.forgotPasswordSchema),
-   authControllers.forgotPassword,
+  "/forgot-password",
+  validateRequest(authValidations.forgotPasswordSchema),
+  authControllers.forgotPassword,
 );
 
 router.post(
-   "/verify-reset-otp",
-   validateRequest(authValidations.verifyResetPasswordOTPSchema),
-   authControllers.verifyResetPasswordOTP,
+  "/verify-reset-otp",
+  validateRequest(authValidations.verifyResetPasswordOTPSchema),
+  authControllers.verifyResetPasswordOTP,
 );
 
 router.post(
-   "/reset-password",
-   validateRequest(authValidations.resetPasswordSchema),
-   authControllers.resetPassword,
+  "/reset-password",
+  validateRequest(authValidations.resetPasswordSchema),
+  authControllers.resetPassword,
 );
 
 router.post(
-   "/change-password",
-   auth(),
-   validateRequest(authValidations.changePasswordSchema),
-   authControllers.changePassword,
+  "/change-password",
+  auth(),
+  validateRequest(authValidations.changePasswordSchema),
+  authControllers.changePassword,
 );
 
 router.post(
-   "/refresh-token",
-   validateRequest(authValidations.refreshTokenSchema),
-   authControllers.refreshToken,
+  "/refresh-token",
+  validateRequest(authValidations.refreshTokenSchema),
+  authControllers.refreshToken,
 );
 
 export const authRoutes = router;

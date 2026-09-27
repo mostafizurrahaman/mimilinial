@@ -6,6 +6,7 @@ import { categoryRoutes } from "../modules/Category";
 import { trackRoutes } from "../modules/Track";
 import { subjectRoutes } from "../modules/Subject";
 import { topicRoutes } from "../modules/Topic";
+import { passageRoutes } from "../modules/Passage";
 
 const router: Router = express();
 
@@ -37,6 +38,10 @@ const routes = [
   {
     path: "/topic",
     route: topicRoutes,
+  },
+  {
+    path: "/passage",
+    route: passageRoutes,
   },
 ];
 
