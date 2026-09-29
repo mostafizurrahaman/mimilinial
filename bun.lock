@@ -6,6 +6,7 @@
       "name": "prostuti-hub",
       "dependencies": {
         "bcrypt": "^6.0.0",
+        "bn-translit": "^0.1.1",
         "cloudinary": "^2.11.0",
         "cookie-parser": "^1.4.7",
         "cors": "^2.8.6",
@@ -169,6 +170,8 @@
     "basic-auth": ["basic-auth@2.0.1", "", { "dependencies": { "safe-buffer": "5.1.2" } }, "sha512-NF+epuEdnUYVlGuhaxbbq+dvJttwLnGY+YixlXlME5KpQ5W3CnXA5cVTneY3SPbPDRkcjMbifrwmFYcClgOZeg=="],
 
     "bcrypt": ["bcrypt@6.0.0", "", { "dependencies": { "node-addon-api": "^8.3.0", "node-gyp-build": "^4.8.4" } }, "sha512-cU8v/EGSrnH+HnxV2z0J7/blxH8gq7Xh2JFT6Aroax7UohdmiJJlxApMxtKfuI7z68NvvVcmR78k2LbT6efhRg=="],
+
+    "bn-translit": ["bn-translit@0.1.1", "", {}, "sha512-1wc3ROBNSOlmJicZ2X4V1U/xr3TMU1/CE0Es01dkmIiEGSWbLI6n115YsLHITG/7MI/P5/n9P6UFLHZByH5fOA=="],
 
     "body-parser": ["body-parser@2.3.0", "", { "dependencies": { "bytes": "^3.1.2", "content-type": "^2.0.0", "debug": "^4.4.3", "http-errors": "^2.0.1", "iconv-lite": "^0.7.2", "on-finished": "^2.4.1", "qs": "^6.15.2", "raw-body": "^3.0.2", "type-is": "^2.1.0" } }, "sha512-2cGmJupaNgg+QUwVLAucDuWuoMZ6EX9iHDRswZ5lsNYEmwPaRknMPCLZz07yTzVq/83p4o/wzbDZbBrTvGGTIw=="],
 

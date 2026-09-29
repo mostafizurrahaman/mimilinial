@@ -1,4 +1,5 @@
 import slugify from "slugify";
+import { slugify as bnSlugify,  } from "bn-translit";
 
 export const createSlug = (text: string): string => {
    return slugify(text.replace(/-/g, ""), {
@@ -6,4 +7,8 @@ export const createSlug = (text: string): string => {
       strict: true,
       trim: true,
    });
+};
+
+export const generateSlug = (text: string): string => {
+   return bnSlugify(text);
 };
