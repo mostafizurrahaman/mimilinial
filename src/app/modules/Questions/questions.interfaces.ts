@@ -5,7 +5,7 @@ import type {
    TQuestionType,
 } from "./questions.constants";
 
-export interface IQuestions {
+export interface IQuestion {
    code: string;
    slug: string;
    type: TQuestionType;
@@ -16,6 +16,6 @@ export interface IQuestions {
    author: Types.ObjectId;
 }
 
-export interface IQuestionsDoc extends Document, IQuestions {}
+export interface IQuestionDoc extends Document, IQuestion {}
 
 // https://yarnpkg.com/package?name=bangla-to-banglish
