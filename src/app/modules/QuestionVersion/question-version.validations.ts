@@ -5,12 +5,21 @@ import {
    optionalEnumString,
    optionalString,
    optionalDate,
+   positiveNumber,
+   requiredStrBoolean,
 } from "../../utils";
 import { questionVersionSortableFields } from "./question-version.constants";
 import { sortOrderValues } from "../../constants";
 
+
+
+
+
+
+
+
 // 1. CREATE QUESTION VERSION
-const createQuestionVersionSchema = z.object({
+const createSingleMcqQuestionVersionSchema = z.object({
    body: z.object({}),
 });
 
