@@ -1,21 +1,22 @@
 import { Schema, model } from "mongoose";
 import type {
+  IFillBlankVersion,
   IMatchingPair,
   IMatchingVersion,
   IMultiMcqVersion,
   IOrderingItem,
+  IOrderingVersion,
   IQuestionOption,
   IQuestionVersionDoc,
   ISingleMcqVersion,
   ITrueFalseVersion,
 } from "./question-version.interfaces";
-import z from "zod";
 import { QUESTION_TYPE, QUESTION_TYPE_VALUES } from "../Questions";
 import {
   QUESTION_VERSION_LANGUAGE,
   QuestionVersionLanguageValues,
 } from "./question-version.constants";
-import { questionUtils } from "./question-utils";
+
 
 /**
  * -------------------------
@@ -97,6 +98,9 @@ const orderingItemSchema = new Schema<IOrderingItem>(
     versionKey: false,
   },
 );
+
+
+
 
 const questionVersionSchema = new Schema<IQuestionVersionDoc>(
   {
@@ -190,8 +194,40 @@ const trueFalseVersionSchema = new Schema<ITrueFalseVersion>({
 
 // 4. Matching Pair:
 const matchingPairVersionSchema = new Schema<IMatchingVersion>({
-
+  pairs: {
+    type: [matchingPairSchema],
+    required: true,
+    min: 2,
+  },
 });
+
+// 5. Fill Blank
+const fillBlankVersionSchema = new Schema<IFillBlankVersion>({
+   acceptedAnswers:  {
+      type: [String], 
+      required: true, 
+      trim: true,
+      min:  1      
+   }, 
+   isCaseSensitive: { 
+      type: Boolean, 
+      required: true,
+      default: false
+   }
+})
+
+// 6. Order Item: 
+const OrderingItemVersionSchema = new Schema<IOrderingVersion>({
+   orderingItems: { 
+    type: [orderingItemSchema], 
+    requried: true, 
+    min: 2, 
+   }
+})
+
+
+
+
 
 /**
  * INDEXING
@@ -227,19 +263,25 @@ export const QuestionVersion = model<IQuestionVersionDoc>(
 );
 
 // Single Question Discriminator  Model:
-export const SingleMcqVersion = QuestionVersion.discriminator(
+export const SingleMcqVersion = QuestionVersion.discriminator<ISingleMcqVersion>(
   QUESTION_TYPE.SINGLE_MCQ,
   singleMcqVersionSchema,
 );
 
 // Multiple Choice Question Discriminator  Model:
-export const MultipleChoiceMcqVersion = QuestionVersion.discriminator(
+export const MultipleChoiceMcqVersion = QuestionVersion.discriminator<IMultiMcqVersion>(
   QUESTION_TYPE.SINGLE_MCQ,
   multipleChoiceVersionSchema,
 );
 
-// True / False Question Version Schema:
-export const TrueFalseMcqVersion = QuestionVersion.discriminator(
+// True / False Question Version Model:
+export const TrueFalseMcqVersion = QuestionVersion.discriminator<ITrueFalseVersion>(
   QUESTION_TYPE.TRUE_FALSE,
   trueFalseVersionSchema,
 );
+
+// Matching Pair Question Version Model: 
+export const MatchingPairQuestionVersion  =  QuestionVersion.discriminator<IMatchingVersion>(QUESTION_TYPE.MATCHING, matchingPairVersionSchema) 
+
+// Fill in the blank: 
+export const FillBlankQuestionVersion =  QuestionVersion.discriminator<IFillBlankVersion>(QUESTION_TYPE.FILL_BLANK, fillBlankVersionSchema)
