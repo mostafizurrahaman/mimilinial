@@ -1,7 +1,6 @@
 import { Schema, model } from "mongoose";
 import type { IUserDoc } from "./user.interfaces";
 import {
-   AuthProviders,
    authProviderValues,
    UserRoles,
    userRoleValues,
@@ -76,6 +75,7 @@ const userSchema = new Schema<IUserDoc>(
       twoFactorBackupCodes: {
          type: [String],
          required: true,
+         select: false,
       },
       blockedReason: {
          type: String,
@@ -97,6 +97,10 @@ const userSchema = new Schema<IUserDoc>(
          type: Date,
          allowNull: true,
       },
+      logOutAt: {
+         type: Date,
+         allowNull: true,
+      },
       lastLoginAt: {
          type: Date,
          allowNull: true,
@@ -111,5 +115,27 @@ const userSchema = new Schema<IUserDoc>(
       versionKey: false,
    },
 );
+
+// 9. Compare is jwt issued before password changed ?
+userSchema.methods.isJwtIssuedBeforePasswordChanged = function (
+   jwtIssuedTimestamp: number,
+): boolean {
+   if (!this.passwordChangedAt) {
+      return false;
+   }
+
+   // Convert to milliseconds
+   const jwtIssuedTime = jwtIssuedTimestamp * 1000;
+
+   // Compare
+   return jwtIssuedTime < this.passwordChangedAt.getTime();
+};
+
+userSchema.post("save", function (doc, next) {
+   doc.password = "";
+   doc.twoFactorBackupCodes = [];
+   doc.twoFactorSecret = "";
+   next();
+});
 
 export const User = model<IUserDoc>("User", userSchema);

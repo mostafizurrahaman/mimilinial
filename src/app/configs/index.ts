@@ -49,10 +49,11 @@ const envSchema = z.object({
    // Admin & OTP
    SUPER_ADMIN_PASSWORD: z.string(),
    SUPER_ADMIN_EMAIL: z.string().email(),
+   SUPER_ADMIN_PHONE: z.string(),
 
    OTP_EXPIRES_IN: z.string().transform(Number).default(5),
    OTP_DIGITS: z.string().transform(Number).default(6),
-   OTP_RESEND_WINDOW: z.string().transform(Number).default(60),
+   OTP_RESEND_WINDOW_SECOND: z.string().transform(Number).default(60),
 
    CLOUDINARY_CLOUD_NAME: z.string(),
    CLOUDINARY_API_SECRET: z.string(),
@@ -119,12 +120,13 @@ export const configs = {
    superAdmin: {
       password: env.SUPER_ADMIN_PASSWORD,
       email: env.SUPER_ADMIN_EMAIL,
+      phone: env.SUPER_ADMIN_PHONE,
    },
 
    otpSettings: {
       expiresIn: env.OTP_EXPIRES_IN,
       digits: env.OTP_DIGITS,
-      resendWindow: env.OTP_RESEND_WINDOW,
+      resendWindowInSeconds: env.OTP_RESEND_WINDOW_SECOND,
    },
 
    cloudinary: {

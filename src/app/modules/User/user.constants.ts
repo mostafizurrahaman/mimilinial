@@ -1,11 +1,31 @@
 // ?? Constants
-export const userSearchableFields = ["name"] as const;
-export const userSortableFields = ["createdAt", "updatedAt"] as const;
+export const userSearchableFields = [
+   "name",
+   "email",
+   "phone",
+   "role",
+   "status",
+] as const;
+
+export const userSortableFields = [
+   "createdAt",
+   "updatedAt",
+   "name",
+   "email",
+   "role",
+   "status",
+] as const;
 
 export const UserRoles = {
    ADMIN: "admin",
    SUPER_ADMIN: "super_admin",
    USER: "user",
+} as const;
+
+export const UserAccessLevel = {
+   [UserRoles.SUPER_ADMIN]: 10,
+   [UserRoles.ADMIN]: 9,
+   [UserRoles.USER]: 1,
 } as const;
 
 export const UserStatus = {

@@ -158,16 +158,16 @@ const update${pascalCase} = async (id: string, payload: TUpdate${pascalCase}Payl
 // 3. GET ALL ${upperName}
 const getAll${pascalCase} = async (query: TGetAll${pascalCase}QueryParamsType) => {
    const {
-      page = 1,
-      limit = 10,
+      page,
+      limit,
+      skip,
       searchTerm,
-      sortOrder = "desc",
-      sortBy = "createdAt",
+      sortOrder,
+      sortBy,
       fromDate,
       toDate,
-   } = query;
+   } = formatQuery(query, ${camelCase}SortableFields);
 
-   const skip = (page - 1) * limit;
    const pipeline: PipelineStage[] = [];
 
    if (fromDate || toDate) {
@@ -188,7 +188,7 @@ const getAll${pascalCase} = async (query: TGetAll${pascalCase}QueryParamsType) =
       });
    }
 
-   pipeline.push({ $sort: { [sortBy]: sortOrder === "asc" ? 1 : -1 } });
+   pipeline.push({ $sort: { [sortBy]: sortOrder } });
 
    pipeline.push({
       $facet: {
@@ -276,7 +276,7 @@ const update${pascalCase} = catchAsync(async (req, res) => {
 
 // 3. GET ALL ${upperName}
 const getAll${pascalCase} = catchAsync(async (req, res) => {
-   const result = await ${camelCase}Services.getAll${pascalCase}(req.query);
+   const result = await ${camelCase}Services.getAll${pascalCase}(req.validQuery);
 
    sendResponse(res, {
       statusCode: httpStatus.OK,

@@ -1,54 +1,38 @@
 import httpStatus from "http-status";
 import { userServices } from "./user.services";
-import { sendResponse, catchAsync } from "../../utils";
-import type { TMulterFile } from "../../interfaces/multer.types";
+import { sendResponse, catchAsync, getUserFromRequest } from "@/app/utils";
+import type { TGetAllUserQueryParamsType } from "./user.validations";
 
-const createUser = catchAsync(async (req, res) => {
-   const profileImage = req.file as TMulterFile;
-   const result = await userServices.createUser(req.body, profileImage);
+const getMe = catchAsync(async (req, res) => {
+   const user = await getUserFromRequest(req);
+   const result = await userServices.getMe(user);
 
    sendResponse(res, {
-      statusCode: httpStatus.CREATED,
-      message: result?.message,
+      statusCode: httpStatus.OK,
+      message: "User profile is retrieved successfully.",
       data: result,
    });
 });
 
-const resendSignupOTP = catchAsync(async (req, res) => {
-   const result = await userServices.resendSignupOTP(req.body);
+const updateUserStatus = catchAsync(async (req, res) => {
+   const user = await getUserFromRequest(req);
+   const userId = req.params.id as string;
+
+   const result = await userServices.updateUserStatus(user, userId, req.body);
 
    sendResponse(res, {
       statusCode: httpStatus.OK,
-      message: "Signup OTP resend successfully.",
-      data: result,
-   });
-});
-
-const verifySignupOTP = catchAsync(async (req, res) => {
-   const result = await userServices.verifySignupOTP(req.body);
-
-   sendResponse(res, {
-      statusCode: httpStatus.OK,
-      message: "Signup OTP verified successfully.",
-      data: result,
-   });
-});
-
-const updateUser = catchAsync(async (req, res) => {
-   const result = await userServices.updateUser(
-      req.params.id as string,
-      req.body,
-   );
-
-   sendResponse(res, {
-      statusCode: httpStatus.OK,
-      message: "The user updated successfully!",
-      data: result,
+      message: result.message || "User status updated successfully.",
+      data: null,
    });
 });
 
 const getAllUser = catchAsync(async (req, res) => {
-   const result = await userServices.getAllUser(req.query);
+   const user = await getUserFromRequest(req);
+   const result = await userServices.getAllUser(
+      user,
+      req.validQuery as TGetAllUserQueryParamsType,
+   );
 
    sendResponse(res, {
       statusCode: httpStatus.OK,
@@ -79,10 +63,8 @@ const deleteUserById = catchAsync(async (req, res) => {
 });
 
 export const userControllers = {
-   createUser,
-   resendSignupOTP,
-   verifySignupOTP,
-   updateUser,
+   getMe,
+   updateUserStatus,
    getAllUser,
    getUserById,
    deleteUserById,

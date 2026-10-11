@@ -1,6 +1,6 @@
 import type { ZodObject } from "zod";
-import { configs } from "../configs";
-import { catchAsync } from "../utils";
+import { configs } from "@/app/configs";
+import { catchAsync } from "@/app/utils/catch-async";
 
 export const validateRequest = (schema: ZodObject) => {
    return catchAsync(async (req, res, next) => {
@@ -37,6 +37,8 @@ export const validateRequest = (schema: ZodObject) => {
          if (data.cookies) {
             req.cookies = data.cookies;
          }
+
+         req.validQuery = data.query;
 
          next();
       } else {

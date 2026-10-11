@@ -1,20 +1,20 @@
 import { v2 as cloudinary, type UploadApiResponse } from "cloudinary";
-import { configs } from "../../configs";
+import { configs } from "@/app/configs";
 
 cloudinary.config({
-   cloud_name: configs?.cloudinary.cloudinaryCloudName,
-   api_key: configs?.cloudinary?.cloudinaryApiKey,
-   api_secret: configs?.cloudinary?.cloudinaryApiSecret,
+  cloud_name: configs?.cloudinary.cloudinaryCloudName,
+  api_key: configs?.cloudinary?.cloudinaryApiKey,
+  api_secret: configs?.cloudinary?.cloudinaryApiSecret,
 });
 
 export const deleteFileByUrl = async (url: string) => {
-   const parts = url.split("/upload/")[1];
+  const parts = url.split("/upload/")[1];
 
-   const publicId = parts
-      ?.replace(/^v\d+\//, "")
-      .replace(/\.[^/.]+$/, "") as string;
+  const publicId = parts
+    ?.replace(/^v\d+\//, "")
+    .replace(/\.[^/.]+$/, "") as string;
 
-   return cloudinary.uploader.destroy(publicId, {
-      invalidate: true,
-   });
+  return cloudinary.uploader.destroy(publicId, {
+    invalidate: true,
+  });
 };

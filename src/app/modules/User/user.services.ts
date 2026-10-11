@@ -1,319 +1,128 @@
 import httpStatus from "http-status";
 import type { PipelineStage } from "mongoose";
 import type {
-   TCreateUserPayloadType,
-   TUpdateUserPayloadType,
    TGetAllUserQueryParamsType,
-   TResendSignupOTPPayloadType,
-   TVerifySignupOTPPayloadType,
+   TUserStatusPayloadType,
 } from "./user.validations";
-import { AppError, BadRequest, NotFoundError } from "../../errors";
+import { AppError, BadRequest, NotFoundError } from "@/app/errors";
 import { User } from "./user.model";
-import { UserRoles, userSearchableFields, UserStatus } from "./user.constants";
-import type { TMulterFile } from "../../interfaces/multer.types";
-import uploadFileIntoCloudinary from "../../utils/cloudinary/upload-file";
-import { File_FOLDER_NAME } from "../../constants/folder_name";
-import { comparePassword, hashPassword } from "../../utils";
-import { configs } from "../../configs";
-import mongoose from "mongoose";
-import { checkResendCoolDown, createOrReplaceOTP, Otp, OtpTypes } from "../Otp";
-import { deleteFileByUrl } from "../../utils/cloudinary/delete-file";
-import { sendEmail } from "../../utils/send-email";
+import {
+   UserAccessLevel,
+   UserRoles,
+   userSearchableFields,
+   userSortableFields,
+   UserStatus,
+} from "./user.constants";
+import type { IUserDoc } from "./user.interfaces";
+import { formatQuery } from "@/app/utils";
 
-/**
- * CREATE USER:
- */
-const createUser = async (
-   payload: TCreateUserPayloadType,
-   profileImage: TMulterFile,
+const getMe = async (user: IUserDoc) => {
+   return {
+      userId: user?._id,
+      name: user?.name,
+      email: user?.email,
+      phone: user?.phone,
+      role: user?.role,
+      status: user?.status,
+      profileImage: user?.profileImage,
+      isOtpVerified: user?.isOtpVerified,
+      authProviders: user?.authProviders,
+      isTwoFactorEnabled: user?.isTwoFactorEnabled,
+      createdAt: user?.createdAt,
+      updatedAt: user?.updatedAt,
+   };
+};
+
+const updateUserStatus = async (
+   user: IUserDoc,
+   targetUserId: string,
+   payload: TUserStatusPayloadType,
 ) => {
-   const { email, name, phone, password } = payload;
+   const { status, reason } = payload;
+   // Check if the target user exists
+   const targetUser = await User.findById(targetUserId);
 
-   // ?? Check with this email is any user exists?
-   const existingUser = await User.findOne({
-      email,
-   });
-
-   if (existingUser) {
-      if (existingUser.isOtpVerified) {
-         throw new BadRequest(
-            `This email already in use. Account status "${existingUser.status}"`,
-         );
-      } else {
-         // ?? Find the otp for this user :
-         const existingOTP = await Otp.findOne({
-            user: existingUser?._id,
-            type: OtpTypes.SIGNUP,
-         });
-
-         // ?? Cooldown:
-         if (existingOTP) {
-            checkResendCoolDown(existingOTP.lastSentAt);
-         }
-
-         const otp = await createOrReplaceOTP(
-            existingUser?._id,
-            OtpTypes.SIGNUP,
-         );
-
-         sendEmail(
-            existingUser?.email,
-            "Your account verification OTP has been resent",
-            `Your Account OTP is ${otp.otp}`,
-            `<h1>Your Account OTP is ${otp.otp}</h1>`,
-            configs.nodeMailer.replyTo,
-         );
-
-         return {
-            message: `OTP resent successfully. Verify your account.`,
-         };
-      }
+   if (!targetUser) {
+      throw new NotFoundError("Target user not found.");
    }
 
-   // ?? Check this phone number already in use?:
-   const associatedUserWithPhone = await User.findOne({
-      phone,
-   });
-
-   if (associatedUserWithPhone) {
-      throw new AppError(
-         httpStatus.BAD_REQUEST,
-         "This phone number already in use.",
-      );
+   // Prevent users from updating their own status
+   if (targetUser._id.toString() === user._id.toString()) {
+      throw new BadRequest("You cannot update your own status.");
    }
 
-   let newProfileUrl: string | null = null;
+   // Get access levels for both users
+   const actorUserAccessLevel = UserAccessLevel?.[user?.role];
+   const targetUserAccessLevel = UserAccessLevel?.[targetUser?.role];
 
-   // ?? File Upload:
-   if (profileImage) {
-      const uploadedFile = await uploadFileIntoCloudinary(
-         profileImage,
-         File_FOLDER_NAME.PROFILE_IMAGES,
-      );
-      newProfileUrl = uploadedFile?.url!;
-   }
-
-   // ?? Hash the password:
-   const hashedPassword = await hashPassword(
-      password,
-      configs.passwordSaltRound,
-   );
-
-   // ?? mongoose Session :
-   const mongoSession = await mongoose.startSession();
-
-   try {
-      mongoSession.startTransaction();
-
-      // ?? Create The user into db:
-      const [user] = await User.create(
-         [
-            {
-               name,
-               email,
-               phone,
-               password: hashedPassword,
-               profileImage: newProfileUrl!,
-               authProviders: ["email"],
-            },
-         ],
-         {
-            session: mongoSession,
-         },
-      );
-
-      if (!user) {
-         throw new AppError(httpStatus.BAD_REQUEST, "Failed to create user.");
-      }
-
-      // ?? Create OTP:
-      const otp = await createOrReplaceOTP(
-         user?._id,
-         OtpTypes.SIGNUP,
-         mongoSession,
-      );
-
-      if (!otp) {
-         throw new AppError(httpStatus.BAD_REQUEST, "Failed to save otp");
-      }
-
-      await mongoSession.commitTransaction();
-
-      sendEmail(
-         user?.email,
-         "Your account verification OTP has been sent",
-         `Your Account OTP is ${otp.otp}`,
-         `<h1>Your Account OTP is ${otp.otp}</h1>`,
-         configs.nodeMailer.replyTo,
-      );
-
-      return {
-         message: "Your account created successfully. Verify your account.",
-         userId: user?._id,
-         email: user.email,
-         role: user.role,
-         status: user.status,
-      };
-   } catch (error) {
-      if (newProfileUrl) {
-         deleteFileByUrl(newProfileUrl).catch((err) => console.log(err));
-      }
-      await mongoSession.abortTransaction();
-      throw error;
-   } finally {
-      await mongoSession.endSession();
-   }
-};
-
-/**
- * RESEND SIGNUP OTP:
- */
-const resendSignupOTP = async (payload: TResendSignupOTPPayloadType) => {
-   const { email } = payload;
-
-   // ?? Find User with email:
-   const user = await User.findOne({
-      email,
-   });
-   if (!user) {
-      throw new NotFoundError("User not found.");
-   }
-
-   // ?? Check  is OTP already verified:
-   if (user.isOtpVerified) {
-      throw new BadRequest("You account has already been verified.");
-   }
-
-   // ?? Check NOT
-   if (user.status !== UserStatus.PENDING) {
+   // Ensure the actor has a higher access level than the target user
+   if (actorUserAccessLevel <= targetUserAccessLevel) {
       throw new BadRequest(
-         `You account is not pending, current status "${user.status}".`,
+         "You do not have permission to update this user's status.",
       );
    }
 
-   // ?? Find OTP:
-   const otp = await Otp.findOne({
-      user: user?._id,
-      type: OtpTypes.SIGNUP,
-   });
-
-   // ?? Check  Cooldown period:
-   if (otp) {
-      checkResendCoolDown(otp.lastSentAt);
-   }
-
-   // ?? Generate a new OTP:
-   const newOtp = await createOrReplaceOTP(user?._id, OtpTypes.SIGNUP);
-
-   if (!newOtp) {
-      throw new BadRequest("Failed to generate new OTP.");
-   }
-
-   sendEmail(
-      user?.email,
-      "Your account verification OTP has been resent",
-      `Your Account OTP is ${newOtp.otp}`,
-      `<h1>Your Account OTP is ${newOtp.otp}</h1>`,
-      configs.nodeMailer.replyTo,
-   );
-};
-
-/**
- * VERIFY SIGNUP OTP:
- */
-
-const verifySignupOTP = async (payload: TVerifySignupOTPPayloadType) => {
-   const { email, otp } = payload;
-
-   // ?? Find User with email:
-   const user = await User.findOne({
-      email,
-   });
-   if (!user) {
-      throw new NotFoundError("User not found.");
-   }
-
-   // ?? Check  is OTP already verified:
-   if (user.isOtpVerified) {
-      throw new BadRequest("You account has already been verified.");
-   }
-
-   // ?? Check NOT
-   if (user.status !== UserStatus.PENDING) {
+   // Check  is user status is pending?
+   if (
+      targetUser.status === UserStatus.PENDING ||
+      targetUser.status === UserStatus.DELETED
+   ) {
       throw new BadRequest(
-         `You account is not pending, current status "${user.status}".`,
+         `You do not update ${targetUser.status} user's status.`,
       );
    }
 
-   // ?? Find OTP:
-   const existingOTP = await Otp.findOne({
-      user: user?._id,
-      type: OtpTypes.SIGNUP,
-   });
-
-   if (!existingOTP) {
-      throw new BadRequest("Invalid OTP");
+   // Check if the user's status is already the requested status
+   if (targetUser.status === status) {
+      throw new BadRequest(`User is already ${status.toLowerCase()}.`);
    }
 
-   // ?? Is OTP Matched?:
-   const isOtpMatched = await comparePassword(otp, existingOTP.otpHash);
-   if (!isOtpMatched) {
-      throw new BadRequest("Invalid OTP");
+   targetUser.status = status;
+
+   if (targetUser.status === UserStatus.BLOCKED) {
+      targetUser.blockedReason = reason as string;
+      targetUser.blockedAt = new Date();
+   } else {
+      targetUser.blockedReason = null;
+      targetUser.blockedAt = null;
    }
 
-   const mongoSession = await mongoose.startSession();
+   await targetUser.save();
 
-   try {
-      mongoSession.startTransaction();
-      user.isOtpVerified = true;
-      user.status = UserStatus.ACTIVE;
-
-      await user.save({
-         session: mongoSession,
-      });
-
-      await Otp.findOneAndDelete({
-         user: user?._id,
-         otpHash: existingOTP.otpHash,
-      });
-
-      await mongoSession.commitTransaction();
-      return null;
-   } catch (error) {
-      await mongoSession.abortTransaction();
-      throw error;
-   } finally {
-      await mongoSession.endSession();
-   }
+   return {
+      message:
+         targetUser?.status === UserStatus.ACTIVE
+            ? "User has been activated successfully."
+            : "User has been blocked successfully. ",
+   };
 };
 
-const updateUser = async (id: string, payload: TUpdateUserPayloadType) => {
-   const result = await User.findOneAndUpdate(
-      { _id: id },
-      { $set: payload },
-      { new: true },
-   );
-
-   if (!result) {
-      throw new AppError(httpStatus.NOT_FOUND, "User not found");
-   }
-
-   return result;
-};
-
-const getAllUser = async (query: TGetAllUserQueryParamsType) => {
+const getAllUser = async (
+   user: IUserDoc,
+   query: TGetAllUserQueryParamsType,
+) => {
    const {
-      page = 1,
-      limit = 10,
+      page,
+      limit,
+      skip,
       searchTerm,
-      sortOrder = "desc",
-      sortBy = "createdAt",
+      sortOrder,
+      sortBy,
       fromDate,
       toDate,
-   } = query;
+   } = formatQuery(query, userSortableFields);
 
-   const skip = (page - 1) * limit;
    const pipeline: PipelineStage[] = [];
+
+   if (user) {
+      pipeline.push({
+         $match: {
+            _id: {
+               $ne: user?._id,
+            },
+         },
+      });
+   }
 
    if (fromDate || toDate) {
       const dateFilter: Record<string, unknown> = {};
@@ -333,7 +142,24 @@ const getAllUser = async (query: TGetAllUserQueryParamsType) => {
       });
    }
 
-   pipeline.push({ $sort: { [sortBy]: sortOrder === "asc" ? 1 : -1 } });
+   pipeline.push({ $sort: { [sortBy]: sortOrder ? 1 : -1 } });
+
+   pipeline.push({
+      $project: {
+         userId: "$_id",
+         name: "$name",
+         email: "$email",
+         phone: "$phone",
+         role: "$role",
+         status: "$status",
+         profileImage: "$profileImage",
+         isOtpVerified: "$isOtpVerified",
+         authProviders: "$authProviders",
+         isTwoFactorEnabled: "$isTwoFactorEnabled",
+         createdAt: "$createdAt",
+         updatedAt: "$updatedAt",
+      },
+   });
 
    pipeline.push({
       $facet: {
@@ -358,6 +184,7 @@ const getAllUser = async (query: TGetAllUserQueryParamsType) => {
    };
 };
 
+// TODO: get user by id:
 const getUserById = async (id: string) => {
    const result = await User.findById(id);
 
@@ -368,6 +195,7 @@ const getUserById = async (id: string) => {
    return result;
 };
 
+// TODO: Delete api is pending
 const deleteUserById = async (id: string) => {
    const result = await User.findOneAndDelete({ _id: id });
 
@@ -379,10 +207,8 @@ const deleteUserById = async (id: string) => {
 };
 
 export const userServices = {
-   createUser,
-   resendSignupOTP,
-   verifySignupOTP,
-   updateUser,
+   getMe,
+   updateUserStatus,
    getAllUser,
    getUserById,
    deleteUserById,

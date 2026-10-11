@@ -14,7 +14,7 @@ export interface IUser {
    // roles:
    role: TUserRole;
    // profile common properties:
-   profileImage?: string;
+   profileImage?: string | null;
 
    // ?? Auth Provider?:
    authProviders: TAuthProviderType[];
@@ -27,24 +27,20 @@ export interface IUser {
    isOtpVerified: boolean;
 
    // reason:
-   blockedReason?: string;
-   deletionReason?: string;
+   blockedReason?: string | null;
+   deletionReason?: string | null;
 
    // common timestamps:
-   blockedAt?: Date;
-   deletedAt?: Date;
+   blockedAt?: Date | null;
+   deletedAt?: Date | null;
    passwordChangedAt?: Date;
+   logOutAt?: Date;
    lastLoginAt?: Date;
    lastActivityAt?: Date;
    createdAt: Date;
    updatedAt: Date;
 }
 
-export interface IUserDoc extends Document, IUser {}
-
-export interface IUserModel extends Model<IUserDoc> {
-   isJwtIssuedBefore: (
-      passwordChangedAt: Date,
-      jwtIssuedAt: Date,
-   ) => Promise<boolean>;
+export interface IUserDoc extends Document, IUser {
+   isJwtIssuedBeforePasswordChanged: (jwtIssuedTimestamp: number) => boolean;
 }
