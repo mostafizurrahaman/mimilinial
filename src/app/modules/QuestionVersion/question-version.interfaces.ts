@@ -70,9 +70,15 @@ export interface IMatchingVersion extends IQuestionVersionDoc {
 
 // 6. ORDERING ITEMS:
 export interface IOrderingVersion extends IQuestionVersionDoc {
-   type:"ordering",
+  type: "ordering";
   orderingItems: IOrderingItem[];
 }
 
 export interface IQuestionVersionDoc extends Document, IQuestionVersion {}
-export type TAnyQuestionVersionDoc = ISingleMcqVersion | IMultiMcqVersion | ITrueFalseVersion | IFillBlankVersion | IMatchingVersion | IOrderingVersion
+export type TAnyQuestionVersionDoc =
+  | ISingleMcqVersion
+  | IMultiMcqVersion
+  | ITrueFalseVersion
+  | IFillBlankVersion
+  | IMatchingVersion
+  | IOrderingVersion;
