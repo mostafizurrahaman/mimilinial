@@ -5,4 +5,5 @@ export const File_FOLDER_NAME = {
    OG_IMAGE: "og_image",
    SUBJECT_ICON: "subject_icon",
    PASSAGE_MEDIA: "passage_media",
+   MEDIA: 'media'
 } as const;

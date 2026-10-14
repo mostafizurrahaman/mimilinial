@@ -12,15 +12,11 @@ import { questionVersionSortableFields } from "./question-version.constants";
 import { sortOrderValues } from "../../constants";
 
 
-
-
-
-
-
-
 // 1. CREATE QUESTION VERSION
 const createSingleMcqQuestionVersionSchema = z.object({
-   body: z.object({}),
+   body: z.object({
+      
+   }),
 });
 
 // 2. UPDATE QUESTION VERSION
