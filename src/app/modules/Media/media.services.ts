@@ -1,14 +1,13 @@
-import httpStatus from "http-status";
 import type { PipelineStage, Types } from "mongoose";
-import type {
-  TCreateMediaPayloadType,
-  TUpdateMediaPayloadType,
-  TGetAllMediaQueryParamsType,
-} from "./media.validations";
-import { AppError, BadRequest } from "../../errors";
+import type { TGetAllMediaQueryParamsType } from "./media.validations";
+import { BadRequest } from "../../errors";
 import { Media } from "./media.model";
-import { MEDIA_STATUS, mediaSearchableFields } from "./media.constants";
-import type { IUser } from "../User";
+import {
+  MEDIA_STATUS,
+  mediaSearchableFields,
+  mediaSortableFields,
+  type TMediaStatus,
+} from "./media.constants";
 import type { TMulterFile } from "@/app/interfaces/multer.types";
 import uploadFileIntoCloudinary from "@/app/utils/cloudinary/upload-file";
 import { File_FOLDER_NAME } from "@/app/constants/folder_name";
@@ -17,7 +16,7 @@ import {
   getPublicId,
 } from "@/app/utils/cloudinary/delete-file";
 import moment from "moment";
-import { logger } from "@/app/utils";
+import { formatQuery, logger } from "@/app/utils";
 import { deleteFilesByUrls } from "@/app/utils/cloudinary/delete-files";
 
 // 1. CREATE MEDIA
@@ -56,8 +55,8 @@ const createMedia = async (userId: Types.ObjectId, file: TMulterFile) => {
   }
 };
 
-// 2. Attach images by urls:
-const attachImages = async (urls: string[]) => {
+// 3. Update media status:
+const updateStatus = async (urls: string[], status: TMediaStatus) => {
   // public Ids
   const publicIds = urls.map((url) => getPublicId(url)).filter(Boolean);
 
@@ -74,46 +73,29 @@ const attachImages = async (urls: string[]) => {
     },
     {
       $set: {
-        status: MEDIA_STATUS.ATTACHED,
+        status,
       },
     },
     {
       runValidators: true,
     },
   );
+};
+
+// 2. Attach images by urls:
+const attachImages = async (urls: string[]) => {
+  await updateStatus(urls, MEDIA_STATUS.ATTACHED);
 };
 
 // 3. Unattach images urls:
 const unattachImages = async (urls: string[]) => {
-  // public Ids
-  const publicIds = urls.map((url) => getPublicId(url)).filter(Boolean);
-
-  // validate public Ids:
-  if (publicIds?.length < 1) {
-    throw new BadRequest("No. public id found for url.");
-  }
-
-  await Media.updateMany(
-    {
-      publicId: {
-        $in: publicIds,
-      },
-    },
-    {
-      $set: {
-        status: MEDIA_STATUS.UNATTACHED,
-      },
-    },
-    {
-      runValidators: true,
-    },
-  );
+  await updateStatus(urls, MEDIA_STATUS.UNATTACHED);
 };
 
 // 4. Delete unattached images via corn job (24  hour time frame) per day 100:
 const removeOrphanedImages = async () => {
-  const now = moment();
-  const twentyFourHourAgo = now.clone().subtract(1, "day")?.toDate();
+  const now = new Date()?.toLocaleDateString();
+  const twentyFourHourAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   // Find first 100 orphaned images:
   const orphanedImages = await Media.find({
@@ -130,7 +112,7 @@ const removeOrphanedImages = async () => {
     .lean();
 
   if (!orphanedImages?.length) {
-    logger.info("No orphaned images found at =>", now.toLocaleString());
+    logger.info("No orphaned images found at =>", now);
     return;
   }
 
@@ -149,23 +131,8 @@ const removeOrphanedImages = async () => {
   });
 
   logger.info(
-    `Successfully removed ${deleteResult.deletedCount} orphaned images.`,
+    `Successfully removed ${deleteResult.deletedCount} orphaned images at  ${now}`,
   );
-};
-
-// 2. UPDATE MEDIA
-const updateMedia = async (id: string, payload: TUpdateMediaPayloadType) => {
-  const result = await Media.findOneAndUpdate(
-    { _id: id },
-    { $set: payload },
-    { new: true },
-  );
-
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, "Media not found");
-  }
-
-  return result;
 };
 
 // 3. GET ALL MEDIA
@@ -184,10 +151,11 @@ const getAllMedia = async (query: TGetAllMediaQueryParamsType) => {
   }
 
   if (searchTerm) {
+    const escapedSearch = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     pipeline.push({
       $match: {
         $or: mediaSearchableFields.map((field) => ({
-          [field]: { $regex: searchTerm, $options: "i" },
+          [field]: { $regex: escapedSearch, $options: "i" },
         })),
       },
     });
@@ -218,32 +186,10 @@ const getAllMedia = async (query: TGetAllMediaQueryParamsType) => {
   };
 };
 
-// 4. GET MEDIA BY ID
-const getMediaById = async (id: string) => {
-  const result = await Media.findById(id);
-
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, "Media not found");
-  }
-
-  return result;
-};
-
-// 5. DELETE MEDIA BY ID
-const deleteMediaById = async (id: string) => {
-  const result = await Media.findOneAndDelete({ _id: id });
-
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, "Media not found");
-  }
-
-  return result;
-};
-
 export const mediaServices = {
   createMedia,
-  updateMedia,
   getAllMedia,
-  getMediaById,
-  deleteMediaById,
+  attachImages,
+  unattachImages,
+  removeOrphanedImages,
 };

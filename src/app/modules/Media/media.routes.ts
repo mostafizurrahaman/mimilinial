@@ -16,41 +16,20 @@ const router: Router = express.Router();
 
 // 1. CREATE MEDIA
 router.post(
-   "/",
-   multerFactory({
-      allowedExtensions: ["jpeg", "jpg", "png", "gif"],
-      maxSizeInMB: 10 
-   }).single("image"),
-   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
-   mediaControllers.createMedia,
-);
-
-// 2. UPDATE MEDIA
-router.patch(
-   "/:id",
-   validateRequest(mediaValidations.updateMediaSchema),
-   mediaControllers.updateMedia,
+  "/",
+  multerFactory({
+    allowedExtensions: ["jpeg", "jpg", "png", "gif"],
+    maxSizeInMB: 10,
+  }).single("image"),
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  mediaControllers.createMedia,
 );
 
 // 3. GET ALL MEDIA
 router.get(
-   "/all",
-   validateRequest(mediaValidations.getAllMediaSchema),
-   mediaControllers.getAllMedia,
-);
-
-// 4. GET MEDIA BY ID
-router.get(
-   "/:id",
-   validateRequest(mediaValidations.getMediaByIdSchema),
-   mediaControllers.getMediaById,
-);
-
-// 5. DELETE MEDIA BY ID
-router.delete(
-   "/:id",
-   validateRequest(mediaValidations.deleteMediaByIdSchema),
-   mediaControllers.deleteMediaById,
+  "/all",
+  validateRequest(mediaValidations.getAllMediaSchema),
+  mediaControllers.getAllMedia,
 );
 
 export const mediaRoutes = router;
