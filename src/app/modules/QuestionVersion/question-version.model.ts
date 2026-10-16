@@ -16,7 +16,7 @@ import {
   QUESTION_VERSION_LANGUAGE,
   QuestionVersionLanguageValues,
 } from "./question-version.constants";
-
+import { questionUtils } from "./question-utils";
 
 /**
  * -------------------------
@@ -99,9 +99,6 @@ const orderingItemSchema = new Schema<IOrderingItem>(
   },
 );
 
-
-
-
 const questionVersionSchema = new Schema<IQuestionVersionDoc>(
   {
     type: {
@@ -128,6 +125,17 @@ const questionVersionSchema = new Schema<IQuestionVersionDoc>(
     stem: {
       type: String,
       required: true,
+      trim: true,
+    },
+    planStem: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    contentHash: {
+      type: String,
+      required: true,
+      index: true,
       trim: true,
     },
     language: {
@@ -159,6 +167,22 @@ const questionVersionSchema = new Schema<IQuestionVersionDoc>(
     versionKey: false,
   },
 );
+
+/**
+ * Pre-validate hook: Automatically compute contentHash if missing or modified
+ */
+questionVersionSchema.pre("validate", function () {
+  if (
+    !this.contentHash ||
+    this.isModified("stem") ||
+    this.isModified("options") ||
+    this.isModified("acceptedAnswers") ||
+    this.isModified("pairs") ||
+    this.isModified("orderingItems")
+  ) {
+    this.contentHash = questionUtils.generateContentHash(this as any);
+  }
+});
 
 /**
  *  DISCRIMINATOR Schemas
@@ -203,41 +227,37 @@ const matchingPairVersionSchema = new Schema<IMatchingVersion>({
 
 // 5. Fill Blank
 const fillBlankVersionSchema = new Schema<IFillBlankVersion>({
-   acceptedAnswers:  {
-      type: [String], 
-      required: true, 
-      trim: true,
-      min:  1      
-   }, 
-   isCaseSensitive: { 
-      type: Boolean, 
-      required: true,
-      default: false
-   }
-})
+  acceptedAnswers: {
+    type: [String],
+    required: true,
+    trim: true,
+    min: 1,
+  },
+  isCaseSensitive: {
+    type: Boolean,
+    required: true,
+    default: false,
+  },
+});
 
-// 6. Order Item: 
+// 6. Order Item:
 const OrderingItemVersionSchema = new Schema<IOrderingVersion>({
-   orderingItems: { 
-    type: [orderingItemSchema], 
-    requried: true, 
-    min: 2, 
-   }
-})
-
-
-
-
+  orderingItems: {
+    type: [orderingItemSchema],
+    requried: true,
+    min: 2,
+  },
+});
 
 /**
  * INDEXING
  */
 
 // Duplicate version index with uniqueness:
-questionOptionSchema.index(
+questionVersionSchema.index(
   {
     question: 1,
-    version: 1,
+    versionNumber: 1,
   },
   {
     unique: true,
@@ -246,13 +266,23 @@ questionOptionSchema.index(
 );
 
 // Ensure one question will have one current version only:
-questionOptionSchema.index(
+questionVersionSchema.index(
   {
     question: 1,
   },
   {
     unique: true,
     partialFilterExpression: { isCurrent: true },
+  },
+);
+
+// Content hash index for instant O(1) duplicate lookup:
+questionVersionSchema.index(
+  {
+    contentHash: 1,
+  },
+  {
+    name: "contentHash_lookup",
   },
 );
 
@@ -263,25 +293,36 @@ export const QuestionVersion = model<IQuestionVersionDoc>(
 );
 
 // Single Question Discriminator  Model:
-export const SingleMcqVersion = QuestionVersion.discriminator<ISingleMcqVersion>(
-  QUESTION_TYPE.SINGLE_MCQ,
-  singleMcqVersionSchema,
-);
+export const SingleMcqVersion =
+  QuestionVersion.discriminator<ISingleMcqVersion>(
+    QUESTION_TYPE.SINGLE_MCQ,
+    singleMcqVersionSchema,
+  );
 
 // Multiple Choice Question Discriminator  Model:
-export const MultipleChoiceMcqVersion = QuestionVersion.discriminator<IMultiMcqVersion>(
-  QUESTION_TYPE.SINGLE_MCQ,
-  multipleChoiceVersionSchema,
-);
+export const MultipleChoiceMcqVersion =
+  QuestionVersion.discriminator<IMultiMcqVersion>(
+    QUESTION_TYPE.SINGLE_MCQ,
+    multipleChoiceVersionSchema,
+  );
 
 // True / False Question Version Model:
-export const TrueFalseMcqVersion = QuestionVersion.discriminator<ITrueFalseVersion>(
-  QUESTION_TYPE.TRUE_FALSE,
-  trueFalseVersionSchema,
-);
+export const TrueFalseMcqVersion =
+  QuestionVersion.discriminator<ITrueFalseVersion>(
+    QUESTION_TYPE.TRUE_FALSE,
+    trueFalseVersionSchema,
+  );
 
-// Matching Pair Question Version Model: 
-export const MatchingPairQuestionVersion  =  QuestionVersion.discriminator<IMatchingVersion>(QUESTION_TYPE.MATCHING, matchingPairVersionSchema) 
+// Matching Pair Question Version Model:
+export const MatchingPairQuestionVersion =
+  QuestionVersion.discriminator<IMatchingVersion>(
+    QUESTION_TYPE.MATCHING,
+    matchingPairVersionSchema,
+  );
 
-// Fill in the blank: 
-export const FillBlankQuestionVersion =  QuestionVersion.discriminator<IFillBlankVersion>(QUESTION_TYPE.FILL_BLANK, fillBlankVersionSchema)
+// Fill in the blank:
+export const FillBlankQuestionVersion =
+  QuestionVersion.discriminator<IFillBlankVersion>(
+    QUESTION_TYPE.FILL_BLANK,
+    fillBlankVersionSchema,
+  );

@@ -1,9 +1,10 @@
-import type { IUser } from "../user.type";
+import type { IUserDoc } from "@/app/modules/User";
+
 
 declare global {
    namespace Express {
       interface Request {
-         user: IUser;
+         user: IUserDoc;
          validQuery: any;
       }
    }

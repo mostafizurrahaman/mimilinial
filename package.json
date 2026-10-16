@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@types/node-cron": "^3.0.11",
+    "@types/sanitize-html": "^2.16.2",
     "bcrypt": "^6.0.0",
     "bn-translit": "^0.1.1",
     "cloudinary": "^2.11.0",
@@ -45,6 +46,7 @@
     "node-cron": "^4.6.0",
     "node-schedule": "^2.1.1",
     "nodemailer": "^10.0.10",
+    "sanitize-html": "^2.18.1",
     "slugify": "^1.6.9",
     "streamifier": "^0.1.1",
     "tsx": "^4.23.13",

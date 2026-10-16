@@ -23,7 +23,6 @@ const questionsSchema = new Schema<IQuestionDoc>(
     slug: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
       index: true,
       lowercase: true,

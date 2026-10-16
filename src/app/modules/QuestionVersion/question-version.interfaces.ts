@@ -28,6 +28,8 @@ export interface IQuestionVersion {
   versionNumber: number;
   isCurrent: boolean;
   stem: string;
+  planStem: string;
+  contentHash: string;
   language: TQuestionVersionLanguageType;
   explanation?: string | null;
   mediaUrl?: string | null;
