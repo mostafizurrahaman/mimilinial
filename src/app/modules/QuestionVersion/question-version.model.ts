@@ -235,7 +235,7 @@ const fillBlankVersionSchema = new Schema<IFillBlankVersion>({
 const OrderingItemVersionSchema = new Schema<IOrderingVersion>({
   orderingItems: {
     type: [orderingItemSchema],
-    requried: true,
+    required: true,
     min: 2,
   },
 });
@@ -317,3 +317,11 @@ export const FillBlankQuestionVersion =
     QUESTION_TYPE.FILL_BLANK,
     fillBlankVersionSchema,
   );
+
+// 6. Ordering Question Version Model:
+export const OrderingQuestionVersion =
+  QuestionVersion.discriminator<IOrderingVersion>(
+    QUESTION_TYPE.ORDERING,
+    OrderingItemVersionSchema,
+  );
+

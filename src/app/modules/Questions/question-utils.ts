@@ -119,9 +119,40 @@ export class QuestionUtils {
       );
     }
 
-    const hasDuplicateOption = questionUtils.hasDuplicateOptions(
-      options as IQuestionOption[],
-    );
+    const firstOpt = options[0];
+    const secondOpt = options[1];
+
+    if (!firstOpt || !secondOpt) {
+      throw new BadRequest(
+        "True/False questions must have exactly two options.",
+      );
+    }
+
+    const firstContent =
+      typeof firstOpt.content === "string"
+        ? firstOpt.content.trim().toLowerCase()
+        : "";
+    const secondContent =
+      typeof secondOpt.content === "string"
+        ? secondOpt.content.trim().toLowerCase()
+        : "";
+
+    if (
+      !["true", "false"].includes(firstContent) ||
+      !["true", "false"].includes(secondContent)
+    ) {
+      throw new BadRequest(
+        "True/False question options content must be 'true' or 'false'.",
+      );
+    }
+
+    if (firstContent === secondContent) {
+      throw new ConflictError(
+        "True/False questions must have one 'true' and one 'false' option.",
+      );
+    }
+
+    const hasDuplicateOption = this.hasDuplicateOptions(options);
 
     if (hasDuplicateOption) {
       throw new ConflictError("Duplicate options are not allowed.");
@@ -129,12 +160,12 @@ export class QuestionUtils {
 
     const correctOptions = options.filter((opt) => opt.isCorrect === true);
 
-    if (correctOptions.length === 0) {
-      throw new BadRequest("One correct option is required.");
+    if (correctOptions.length !== 1) {
+      throw new BadRequest("Exactly one correct option is required.");
     }
 
-    if (correctOptions.length > 1) {
-      throw new BadRequest("Only one correct option is allowed.");
+    if (firstOpt.sortOrder === secondOpt.sortOrder) {
+      throw new BadRequest("Options must have distinct sort orders.");
     }
   }
 
@@ -142,9 +173,13 @@ export class QuestionUtils {
    * Fill in the Blank Answer:
    * - Min 1 answer required into array
    * - Answer should not be empty string.
+   * - No duplicate answers
    */
 
-  validateFillBlankAnswers(acceptedAnswers: string[]): void {
+  validateFillBlankAnswers(
+    acceptedAnswers: string[],
+    isCaseSensitive: boolean = false,
+  ): void {
     if (!Array.isArray(acceptedAnswers)) {
       throw new BadRequest("Accepted answers must be a list.");
     }
@@ -161,12 +196,26 @@ export class QuestionUtils {
     if (hasEmptyAnswer) {
       throw new BadRequest("Accepted answers cannot be empty.");
     }
+
+    // Check for duplicate answers
+    const seen = new Set<string>();
+    for (const ans of acceptedAnswers) {
+      const normalized = isCaseSensitive
+        ? ans.trim()
+        : ans.trim().toLowerCase();
+      if (seen.has(normalized)) {
+        throw new ConflictError("Duplicate accepted answers are not allowed.");
+      }
+      seen.add(normalized);
+    }
   }
 
   /**
    * Matching Pair Check:
    * - Min 2 Pairs are required
    * - Each pair should have left and right side valid content.
+   * - Distinct left side items (no ambiguity)
+   * - Distinct right side items (1-to-1 match)
    */
 
   validateMatchingPairs(pairs: IMatchingPair[]): void {
@@ -191,13 +240,39 @@ export class QuestionUtils {
         "Both left and right values are required for each matching pair.",
       );
     }
+
+    // Check duplicate left items
+    const leftSet = new Set<string>();
+    for (const pair of pairs) {
+      const normalizedLeft = this.normalizeText(pair.left);
+      if (leftSet.has(normalizedLeft)) {
+        throw new ConflictError(
+          "Duplicate left side items are not allowed in matching pairs.",
+        );
+      }
+      leftSet.add(normalizedLeft);
+    }
+
+    // Check duplicate right items
+    const rightSet = new Set<string>();
+    for (const pair of pairs) {
+      const normalizedRight = this.normalizeText(pair.right);
+      if (rightSet.has(normalizedRight)) {
+        throw new ConflictError(
+          "Duplicate right side items are not allowed in matching pairs.",
+        );
+      }
+      rightSet.add(normalizedRight);
+    }
   }
 
   /**
    * Ordering Item Checking:
    * - Min 2 Item required.
-   * - Each Item should have  valid content
-   * - Each item should have valid order
+   * - Each Item should have valid content
+   * - Each item must have unique text
+   * - Each item should have unique positive integer order
+   * - Correct orders must form sequential 1 to N sequence
    */
 
   validateOrderingItems(items: IOrderingItem[]): void {
@@ -224,12 +299,34 @@ export class QuestionUtils {
       );
     }
 
+    // Check duplicate item texts
+    const seenTexts = new Set<string>();
+    for (const item of items) {
+      const normalized = this.normalizeText(item.text);
+      if (seenTexts.has(normalized)) {
+        throw new ConflictError(
+          "Duplicate item texts are not allowed in ordering items.",
+        );
+      }
+      seenTexts.add(normalized);
+    }
+
     const orders = items.map((item) => item.correctOrder);
 
     if (new Set(orders).size !== orders.length) {
       throw new BadRequest(
         "Each ordering item must have a unique correctOrder.",
       );
+    }
+
+    // Check sequential sequence from 1 to N
+    const sortedOrders = [...orders].sort((a, b) => a - b);
+    for (let i = 0; i < sortedOrders.length; i++) {
+      if (sortedOrders[i] !== i + 1) {
+        throw new BadRequest(
+          `Correct order must be sequential starting from 1 to ${items.length}.`,
+        );
+      }
     }
   }
 
@@ -243,7 +340,10 @@ export class QuestionUtils {
       case "true_false":
         return this.validateTrueFalseOptions(payload.options);
       case "fill_blank":
-        return this.validateFillBlankAnswers(payload.acceptedAnswers);
+        return this.validateFillBlankAnswers(
+          payload.acceptedAnswers,
+          payload.isCaseSensitive,
+        );
       case "matching":
         return this.validateMatchingPairs(payload.pairs);
       case "ordering":
@@ -282,7 +382,7 @@ export class QuestionUtils {
 
     do {
       code = this.generateQuestionCode(prefix);
-    } while (await Question.exists({ questionCode: code }));
+    } while (await Question.exists({ code }));
 
     return code;
   }

@@ -14,7 +14,7 @@ const router: Router = express.Router();
  * -------------------------------------------------------------------------
  */
 
-// 1. CREATE SINGLE  MCQ QUESTIONS
+// 1. CREATE SINGLE MCQ QUESTIONS
 router.post(
   "/single-mcq",
   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
@@ -30,28 +30,60 @@ router.post(
   questionsControllers.createMultiMcqQuestion,
 );
 
-// // 2. UPDATE QUESTIONS
+// 3. CREATE TRUE FALSE QUESTIONS
+router.post(
+  "/true-false",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.createTrueFalseQuestionSchema),
+  questionsControllers.createTrueFalseQuestion,
+);
+
+// 4. CREATE FILL IN THE BLANK QUESTIONS
+router.post(
+  "/fill-blank",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.createFillBlankQuestionSchema),
+  questionsControllers.createFillBlankQuestion,
+);
+
+// 5. CREATE MATCHING QUESTIONS
+router.post(
+  "/matching",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.createMatchingQuestionSchema),
+  questionsControllers.createMatchingQuestion,
+);
+
+// 6. CREATE ORDERING QUESTIONS
+router.post(
+  "/ordering",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.createOrderingQuestionSchema),
+  questionsControllers.createOrderingQuestion,
+);
+
+// // UPDATE QUESTIONS
 // router.patch(
 //   "/:id",
 //   validateRequest(questionsValidations.updateQuestionsSchema),
 //   questionsControllers.updateQuestions,
 // );
 
-// // 3. GET ALL QUESTIONS
+// // GET ALL QUESTIONS
 // router.get(
 //   "/all",
 //   validateRequest(questionsValidations.getAllQuestionsSchema),
 //   questionsControllers.getAllQuestions,
 // );
 
-// // 4. GET QUESTIONS BY ID
+// // GET QUESTIONS BY ID
 // router.get(
 //   "/:id",
 //   validateRequest(questionsValidations.getQuestionsByIdSchema),
 //   questionsControllers.getQuestionsById,
 // );
 
-// // 5. DELETE QUESTIONS BY ID
+// // DELETE QUESTIONS BY ID
 // router.delete(
 //   "/:id",
 //   validateRequest(questionsValidations.deleteQuestionsByIdSchema),
