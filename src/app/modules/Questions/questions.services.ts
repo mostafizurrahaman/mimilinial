@@ -2,26 +2,32 @@ import httpStatus from "http-status";
 import type { PipelineStage } from "mongoose";
 
 import { AppError, ConflictError, NotFoundError } from "../../errors";
-import { Questions } from "./questions.model";
+import { Question } from "./questions.model";
 import {
   QUESTION_STATUS,
   QUESTION_TYPE,
   questionsSearchableFields,
 } from "./questions.constants";
-import type { TCreateSingleMcqQuestionPayloadType } from "./questions.validations";
+import type {
+  TCreateMultiMcqQuestionSchema,
+  TCreateSingleMcqQuestionPayloadType,
+} from "./questions.validations";
 import type { IUser, IUserDoc } from "../User";
 import { Passage } from "../Passage";
-import { questionUtils } from "../QuestionVersion/question-utils";
+import { questionUtils } from "./question-utils";
 import {
-  questionVersionServices,
+  MultipleChoiceMcqVersion,
   SingleMcqVersion,
-  type IQuestionOption,
-} from "../QuestionVersion";
+} from "../QuestionVersion/question-version.model";
+
 import mongoose from "mongoose";
 import { extractCloudinaryImages } from "@/app/utils/extract-cloudinary-images";
+import { mediaServices } from "../Media";
+import type { IQuestionOption } from "./questions.interfaces";
+import { questionVersionServices } from "../QuestionVersion";
 
-// 1. CREATE QUESTIONS
-const createQuestions = async (
+// 1. CREATE SINGLE MCQ QUESTIONS
+const createSingleMcqQuestion = async (
   user: IUserDoc,
   payload: TCreateSingleMcqQuestionPayloadType,
 ) => {
@@ -37,12 +43,17 @@ const createQuestions = async (
   } = payload;
 
   //  Validate the question:
-  questionUtils.validateByType(QUESTION_TYPE.SINGLE_MCQ, options);
+  questionUtils.validateByType(QUESTION_TYPE.SINGLE_MCQ, payload);
 
   // Check is passage exists ?:
-  const existingPassage = await Passage.findById(passageId);
-  if (!existingPassage) {
-    throw new NotFoundError("Pasasge not found.");
+
+  let existingPassage = null;
+
+  if (passageId) {
+    existingPassage = await Passage.findById(passageId);
+    if (!existingPassage) {
+      throw new NotFoundError("Passage not found.");
+    }
   }
 
   //  Hash content:
@@ -57,7 +68,7 @@ const createQuestions = async (
     await questionVersionServices.checkDuplicateByHash(hashedContent);
 
   if (duplicateContent) {
-    throw new ConflictError("The question with same options arleady exists.");
+    throw new ConflictError("The question with same options already exists.");
   }
 
   // Generate code:
@@ -66,8 +77,8 @@ const createQuestions = async (
   const language = questionUtils.detectLanguage(stem);
   const planHtml = questionUtils.stripHtml(stem);
 
-  // Check is the slug aready in use:
-  const duplicateSlug = await Questions.exists({ slug });
+  // Check is the slug already in use:
+  const duplicateSlug = await Question.exists({ slug });
 
   if (duplicateSlug) {
     throw new ConflictError(
@@ -75,22 +86,22 @@ const createQuestions = async (
     );
   }
 
-  const mediaUrls: string[] = [];
+  const mediaUrls = new Set<string>();
 
-  if (mediaUrl) mediaUrls.push(mediaUrl);
+  if (mediaUrl) mediaUrls.add(mediaUrl);
 
   const contents: string[] = [stem];
 
-  if (explanation) return contents.push(explanation as string);
+  if (explanation) contents.push(explanation as string);
   options.forEach((opt) => {
     if (opt.content) contents.push(opt.content);
-    if (opt.mediaUrl) mediaUrls.push(opt.mediaUrl);
+    if (opt.mediaUrl) mediaUrls.add(opt.mediaUrl);
   });
 
   const contentUrls = extractCloudinaryImages(contents);
 
   if (contentUrls.length > 0) {
-    mediaUrls.push(...contentUrls);
+    contentUrls.forEach((url) => mediaUrls.add(url));
   }
 
   // Session :
@@ -109,11 +120,10 @@ const createQuestions = async (
       status: QUESTION_STATUS.DRAFT,
       passageId: existingPassage?._id || undefined,
       isFlagged: false,
-      language,
       author: user._id,
     };
 
-    const question = await Questions.create([questionPayload], {
+    const question = await Question.create([questionPayload], {
       session: mongoSession,
     });
 
@@ -145,106 +155,179 @@ const createQuestions = async (
     if (!version?.[0]) {
       throw new ConflictError("Failed to create question version");
     }
-  } catch (error) {}
 
-  const result = await Questions.create(payload);
-  return result;
+    if (mediaUrls.size > 0) {
+      await mediaServices.attachImages(Array.from(mediaUrls));
+    }
+
+    await mongoSession.commitTransaction();
+
+    return question?.[0];
+  } catch (error) {
+    if (mongoSession.inTransaction()) {
+      await mongoSession.abortTransaction();
+    }
+
+    throw error;
+  } finally {
+    await mongoSession.endSession();
+  }
 };
 
-// // 2. UPDATE QUESTIONS
-// const updateQuestions = async (
-//   id: string,
-//   payload: TUpdateQuestionsPayloadType,
-// ) => {
-//   const result = await Questions.findOneAndUpdate(
-//     { _id: id },
-//     { $set: payload },
-//     { new: true },
-//   );
+// 2. CREATE MULTI MCQ QUESTION:
+const createMultiMcqQuestion = async (
+  user: IUserDoc,
+  payload: TCreateMultiMcqQuestionSchema,
+) => {
+  // Payload extract:
+  const {
+    passageId,
+    stem,
+    options,
+    explanation,
+    changeLog,
+    difficulty,
+    mediaUrl,
+  } = payload;
 
-//   if (!result) {
-//     throw new AppError(httpStatus.NOT_FOUND, "Questions not found");
-//   }
+  //  Validate the question:
+  questionUtils.validateByType(QUESTION_TYPE.MULTI_MCQ, payload);
 
-//   return result;
-// };
+  // Check is passage exists ?:
 
-// // 3. GET ALL QUESTIONS
-// const getAllQuestions = async (query: TGetAllQuestionsQueryParamsType) => {
-//   const { page, limit, skip, searchTerm, sortOrder, sortBy, fromDate, toDate } =
-//     formatQuery(query, questionsSortableFields);
+  let existingPassage = null;
 
-//   const pipeline: PipelineStage[] = [];
+  if (passageId) {
+    existingPassage = await Passage.findById(passageId);
+    if (!existingPassage) {
+      throw new NotFoundError("Passage not found.");
+    }
+  }
 
-//   if (fromDate || toDate) {
-//     const dateFilter: Record<string, unknown> = {};
-//     if (fromDate) dateFilter.$gte = new Date(fromDate);
-//     if (toDate) dateFilter.$lte = new Date(toDate);
+  //  Hash content:
+  const hashedContent = questionUtils.generateContentHash({
+    type: QUESTION_TYPE.MULTI_MCQ,
+    stem,
+    options: options as IQuestionOption[],
+  });
 
-//     pipeline.push({ $match: { createdAt: dateFilter } });
-//   }
+  //  Check hash already exists?:
+  const duplicateContent =
+    await questionVersionServices.checkDuplicateByHash(hashedContent);
 
-//   if (searchTerm) {
-//     pipeline.push({
-//       $match: {
-//         $or: questionsSearchableFields.map((field) => ({
-//           [field]: { $regex: searchTerm, $options: "i" },
-//         })),
-//       },
-//     });
-//   }
+  if (duplicateContent) {
+    throw new ConflictError("The question with same options already exists.");
+  }
 
-//   pipeline.push({ $sort: { [sortBy]: sortOrder } });
+  // Generate code:
+  const code = await questionUtils.generateUniqueQuestionCode();
+  const slug = questionUtils.generateSafeQuestionSlug(stem, code);
+  const language = questionUtils.detectLanguage(stem);
+  const planHtml = questionUtils.stripHtml(stem);
 
-//   pipeline.push({
-//     $facet: {
-//       data: [{ $skip: skip }, { $limit: limit }],
-//       meta: [{ $count: "total" }],
-//     },
-//   });
+  // Check is the slug already in use:
+  const duplicateSlug = await Question.exists({ slug });
 
-//   const aggregated = await Questions.aggregate(pipeline);
+  if (duplicateSlug) {
+    throw new ConflictError(
+      `Please try again with a new code/slug for this question.`,
+    );
+  }
 
-//   const data = aggregated?.[0]?.data || [];
-//   const total = aggregated?.[0]?.meta?.[0]?.total || 0;
+  const mediaUrls = new Set<string>();
 
-//   return {
-//     data,
-//     meta: {
-//       page,
-//       limit,
-//       total,
-//       totalPages: Math.ceil(total / limit) || 1,
-//     },
-//   };
-// };
+  if (mediaUrl) mediaUrls.add(mediaUrl);
 
-// // 4. GET QUESTIONS BY ID
-// const getQuestionsById = async (id: string) => {
-//   const result = await Questions.findById(id);
+  const contents: string[] = [stem];
 
-//   if (!result) {
-//     throw new AppError(httpStatus.NOT_FOUND, "Questions not found");
-//   }
+  if (explanation) contents.push(explanation as string);
+  options.forEach((opt) => {
+    if (opt.content) contents.push(opt.content);
+    if (opt.mediaUrl) mediaUrls.add(opt.mediaUrl);
+  });
 
-//   return result;
-// };
+  const contentUrls = extractCloudinaryImages(contents);
 
-// // 5. DELETE QUESTIONS BY ID
-// const deleteQuestionsById = async (id: string) => {
-//   const result = await Questions.findOneAndDelete({ _id: id });
+  if (contentUrls.length > 0) {
+    contentUrls.forEach((url) => mediaUrls.add(url));
+  }
 
-//   if (!result) {
-//     throw new AppError(httpStatus.NOT_FOUND, "Questions not found");
-//   }
+  // Session :
+  const mongoSession = await mongoose.startSession();
 
-//   return result;
-// };
+  try {
+    mongoSession.startTransaction();
+
+    //  Create the question:
+
+    const questionPayload = {
+      code,
+      slug,
+      type: QUESTION_TYPE.MULTI_MCQ,
+      difficulty: difficulty || "medium",
+      status: QUESTION_STATUS.DRAFT,
+      passageId: existingPassage?._id || undefined,
+      isFlagged: false,
+      author: user._id,
+    };
+
+    const question = await Question.create([questionPayload], {
+      session: mongoSession,
+    });
+
+    if (!question?.[0]) {
+      throw new ConflictError("Failed to create question");
+    }
+
+    // Create version
+    const multiMcqVersionPayload = {
+      type: QUESTION_TYPE.MULTI_MCQ,
+      question: question[0]._id,
+      versionNumber: 1,
+      isCurrent: true,
+      stem,
+      planStem: planHtml,
+      options: options as IQuestionOption[],
+      contentHash: hashedContent,
+      language,
+      explanation,
+      changeLog,
+      mediaUrl,
+      author: user._id,
+    };
+
+    const version = await MultipleChoiceMcqVersion.create(
+      [multiMcqVersionPayload],
+      {
+        session: mongoSession,
+      },
+    );
+
+    if (!version?.[0]) {
+      throw new ConflictError("Failed to create question version");
+    }
+
+    if (mediaUrls.size > 0) {
+      await mediaServices.attachImages(Array.from(mediaUrls));
+    }
+
+    await mongoSession.commitTransaction();
+
+    return question?.[0];
+  } catch (error) {
+    if (mongoSession.inTransaction()) {
+      await mongoSession.abortTransaction();
+    }
+
+    throw error;
+  } finally {
+    await mongoSession.endSession();
+  }
+};
+
+// 3.  CREATE TRUE_FALSE QUESTION:
 
 export const questionsServices = {
-  createQuestions,
-  //   updateQuestions,
-  //   getAllQuestions,
-  //   getQuestionsById,
-  //   deleteQuestionsById,
+  createSingleMcqQuestion,
+  createMultiMcqQuestion,
 };

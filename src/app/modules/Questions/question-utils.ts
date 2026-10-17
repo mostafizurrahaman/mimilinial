@@ -4,14 +4,17 @@ import crypto, { randomBytes } from "crypto";
 // @ts-ignore
 import { slugify as bnSlugify } from "bn-translit";
 import { generateSlug } from "@/app/utils";
+import { Question } from "./questions.model";
+import { BadRequest, ConflictError } from "@/app/errors";
 import type {
   IMatchingPair,
   IOrderingItem,
   IQuestionOption,
-} from "./question-version.interfaces";
-import { Questions, type TQuestionType } from "../Questions";
-import type { TQuestionVersionLanguageType } from "./question-version.constants";
-import { BadRequest } from "@/app/errors";
+} from "./questions.interfaces";
+import type {
+  TQuestionType,
+  TQuestionVersionLanguageType,
+} from "./questions.constants";
 
 export class QuestionUtils {
   /**
@@ -46,6 +49,14 @@ export class QuestionUtils {
       throw new BadRequest("Option content cannot be empty.");
     }
 
+    const hasDuplicateOption = questionUtils.hasDuplicateOptions(
+      options as IQuestionOption[],
+    );
+
+    if (hasDuplicateOption) {
+      throw new ConflictError("Duplicate options are not allowed.");
+    }
+
     // Validate exactly one correct option
     const correctOptions = options.filter((opt) => opt.isCorrect === true);
 
@@ -60,28 +71,34 @@ export class QuestionUtils {
    * - One or more options should have isCorrect : true
    */
   validateMultiMcqOptions(options: IQuestionOption[]) {
-    function validateMultiMcqOptions(options: IQuestionOption[]): void {
-      if (!Array.isArray(options)) {
-        throw new BadRequest("Options must be a list.");
-      }
+    if (!Array.isArray(options)) {
+      throw new BadRequest("Options must be a list.");
+    }
 
-      if (options.length < 2) {
-        throw new BadRequest("At least two options are required.");
-      }
+    if (options.length < 2) {
+      throw new BadRequest("At least two options are required.");
+    }
 
-      const hasEmptyContent = options.some(
-        (opt) => typeof opt.content !== "string" || opt.content.trim() === "",
-      );
+    const hasEmptyContent = options.some(
+      (opt) => typeof opt.content !== "string" || opt.content.trim() === "",
+    );
 
-      if (hasEmptyContent) {
-        throw new BadRequest("Option content cannot be empty.");
-      }
+    if (hasEmptyContent) {
+      throw new BadRequest("Option content cannot be empty.");
+    }
 
-      const correctOptions = options.filter((opt) => opt.isCorrect === true);
+    const hasDuplicateOption = questionUtils.hasDuplicateOptions(
+      options as IQuestionOption[],
+    );
 
-      if (correctOptions.length < 1) {
-        throw new BadRequest("At least one correct option is required.");
-      }
+    if (hasDuplicateOption) {
+      throw new ConflictError("Duplicate options are not allowed.");
+    }
+
+    const correctOptions = options.filter((opt) => opt.isCorrect === true);
+
+    if (correctOptions.length < 1) {
+      throw new BadRequest("At least one correct option is required.");
     }
   }
 
@@ -100,6 +117,14 @@ export class QuestionUtils {
       throw new BadRequest(
         "True/False questions must have exactly two options.",
       );
+    }
+
+    const hasDuplicateOption = questionUtils.hasDuplicateOptions(
+      options as IQuestionOption[],
+    );
+
+    if (hasDuplicateOption) {
+      throw new ConflictError("Duplicate options are not allowed.");
     }
 
     const correctOptions = options.filter((opt) => opt.isCorrect === true);
@@ -232,7 +257,6 @@ export class QuestionUtils {
   // 2. HELPER METHODS FOR QUESTION VERSION:
   // ========================================================
 
-
   /**
    *  Detect Language Function
    */
@@ -258,7 +282,7 @@ export class QuestionUtils {
 
     do {
       code = this.generateQuestionCode(prefix);
-    } while (await Questions.exists({ questionCode: code }));
+    } while (await Question.exists({ questionCode: code }));
 
     return code;
   }
@@ -361,6 +385,25 @@ export class QuestionUtils {
     // Add the unique code:
     return `${baseSlug}-${code.toLowerCase()}`;
   }
+
+  hasDuplicateOptions = (options: IQuestionOption[]): boolean => {
+    const seen = new Set<string>();
+
+    for (const option of options) {
+      const normalizedContent = option.content
+        .trim()
+        .replace(/\s+/g, " ")
+        .toLowerCase();
+
+      if (seen.has(normalizedContent)) {
+        return true;
+      }
+
+      seen.add(normalizedContent);
+    }
+
+    return false;
+  };
 }
 
 export const questionUtils = new QuestionUtils();

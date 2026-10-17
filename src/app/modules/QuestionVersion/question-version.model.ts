@@ -1,22 +1,13 @@
 import { Schema, model } from "mongoose";
-import type {
-  IFillBlankVersion,
-  IMatchingPair,
-  IMatchingVersion,
-  IMultiMcqVersion,
-  IOrderingItem,
-  IOrderingVersion,
-  IQuestionOption,
-  IQuestionVersionDoc,
-  ISingleMcqVersion,
-  ITrueFalseVersion,
-} from "./question-version.interfaces";
-import { QUESTION_TYPE, QUESTION_TYPE_VALUES } from "../Questions";
 import {
+  QUESTION_TYPE,
+  QUESTION_TYPE_VALUES,
   QUESTION_VERSION_LANGUAGE,
   QuestionVersionLanguageValues,
-} from "./question-version.constants";
-import { questionUtils } from "./question-utils";
+} from "../Questions/questions.constants";
+
+import { questionUtils } from "../Questions/question-utils";
+import type { IFillBlankVersion, IMatchingPair, IMatchingVersion, IMultiMcqVersion, IOrderingItem, IOrderingVersion, IQuestionOption, IQuestionVersionDoc, ISingleMcqVersion, ITrueFalseVersion } from "../Questions";
 
 /**
  * -------------------------
@@ -302,7 +293,7 @@ export const SingleMcqVersion =
 // Multiple Choice Question Discriminator  Model:
 export const MultipleChoiceMcqVersion =
   QuestionVersion.discriminator<IMultiMcqVersion>(
-    QUESTION_TYPE.SINGLE_MCQ,
+    QUESTION_TYPE.MULTI_MCQ,
     multipleChoiceVersionSchema,
   );
 

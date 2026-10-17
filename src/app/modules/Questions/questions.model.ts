@@ -49,7 +49,6 @@ const questionsSchema = new Schema<IQuestionDoc>(
     passageId: {
       type: Schema.Types.ObjectId,
       ref: "Passage",
-      required: true,
       index: true,
       allowNull: true,
       default: null,
@@ -87,4 +86,4 @@ questionsSchema.index({
 // 2. Status and flag handle:
 questionsSchema.index({ status: 1, isFlagged: 1 });
 
-export const Questions = model<IQuestionDoc>("Questions", questionsSchema);
+export const Question = model<IQuestionDoc>("Question", questionsSchema);

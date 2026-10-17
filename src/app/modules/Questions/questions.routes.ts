@@ -1,9 +1,10 @@
 import express, { Router } from "express";
 import { questionsControllers } from "./questions.controllers";
 import { validateRequest } from "../../middlewares";
-import { questionValidations } from "./questions.validations";
+
 import { auth } from "@/app/middlewares/auth";
 import { UserRoles } from "../User";
+import { questionValidations } from "./questions.validations";
 
 const router: Router = express.Router();
 
@@ -13,12 +14,20 @@ const router: Router = express.Router();
  * -------------------------------------------------------------------------
  */
 
-// 1. CREATE QUESTIONS
+// 1. CREATE SINGLE  MCQ QUESTIONS
 router.post(
-  "/",
+  "/single-mcq",
   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
-  validateRequest(questionValidations.createSingelMcqQuestionSchema),
-  questionsControllers.createQuestions,
+  validateRequest(questionValidations.createSingleMcqQuestionSchema),
+  questionsControllers.createSingleMcqQuestion,
+);
+
+// 2. CREATE MULTI MCQ QUESTIONS
+router.post(
+  "/multi-mcq",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.createMultiMcqOptionSchema),
+  questionsControllers.createMultiMcqQuestion,
 );
 
 // // 2. UPDATE QUESTIONS
