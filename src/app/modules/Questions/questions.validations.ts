@@ -151,10 +151,9 @@ const TrueFalseOptionSchema = z.object({
   content: z
     .string({ error: "Option content is required" })
     .trim()
-    .refine(
-      (val) => ["true", "false"].includes(val.toLowerCase()),
-      { message: "Option content must be either 'true' or 'false'" },
-    )
+    .refine((val) => ["true", "false"].includes(val.toLowerCase()), {
+      message: "Option content must be either 'true' or 'false'",
+    })
     .transform((val) => val.toLowerCase()),
   mediaUrl: optionalString("Media url").nullable().optional(),
   isCorrect: requiredStrBoolean("Is correct"),
@@ -241,6 +240,15 @@ const createFillBlankQuestionSchema = z.object({
         .optional(),
     })
     .superRefine((data, ctx) => {
+      if (!data.stem?.includes("___")) {
+        ctx.addIssue({
+          code: "custom",
+          message:
+            "Fill-in-the-gap question stem must contain at least one blank (___).",
+          path: ["stem"],
+        });
+      }
+
       if (data?.acceptedAnswers && data.acceptedAnswers.length > 0) {
         const hasEmpty = data.acceptedAnswers.some(
           (ans) => !ans || ans.trim().length === 0,

@@ -2,24 +2,24 @@ export const questionsSearchableFields = ["name"] as const;
 export const questionsSortableFields = ["createdAt", "updatedAt"] as const;
 
 export const QUESTION_STATUS = {
-   DRAFT: "draft",
-   PUBLISHED: "published",
-   ARCHIVED: "archived",
+  DRAFT: "draft",
+  PUBLISHED: "published",
+  ARCHIVED: "archived",
 } as const;
 
 export const QUESTION_DIFFICULTY = {
-   EASY: "easy",
-   MEDIUM: "medium",
-   HARD: "hard",
+  EASY: "easy",
+  MEDIUM: "medium",
+  HARD: "hard",
 } as const;
 
 export const QUESTION_TYPE = {
-   SINGLE_MCQ: "single_mcq",
-   MULTI_MCQ: "multi_mcq",
-   TRUE_FALSE: "true_false",
-   FILL_BLANK: "fill_blank",
-   MATCHING: "matching",
-   ORDERING: "ordering",
+  SINGLE_MCQ: "single_mcq",
+  MULTI_MCQ: "multi_mcq",
+  TRUE_FALSE: "true_false",
+  FILL_BLANK: "fill_blank",
+  MATCHING: "matching",
+  ORDERING: "ordering",
 } as const;
 
 export const questionVersionSearchableFields = ["name"] as const;
@@ -44,7 +44,6 @@ export type TQuestionVersionSortableField =
 export type TQuestionVersionLanguageType =
   (typeof QUESTION_VERSION_LANGUAGE)[keyof typeof QUESTION_VERSION_LANGUAGE];
 
-
 export const QUESTION_STATUS_VALUES = Object.values(QUESTION_STATUS);
 
 export const QUESTION_DIFFICULTY_VALUES = Object.values(QUESTION_DIFFICULTY);
@@ -52,11 +51,11 @@ export const QUESTION_DIFFICULTY_VALUES = Object.values(QUESTION_DIFFICULTY);
 export const QUESTION_TYPE_VALUES = Object.values(QUESTION_TYPE);
 
 export type TQuestionsSearchableField =
-   (typeof questionsSearchableFields)[number];
+  (typeof questionsSearchableFields)[number];
 export type TQuestionsSortableField = (typeof questionsSortableFields)[number];
 
 export type TQuestionStatusType =
-   (typeof QUESTION_STATUS)[keyof typeof QUESTION_STATUS];
+  (typeof QUESTION_STATUS)[keyof typeof QUESTION_STATUS];
 export type TQuestionDifficultyType =
-   (typeof QUESTION_DIFFICULTY)[keyof typeof QUESTION_DIFFICULTY];
+  (typeof QUESTION_DIFFICULTY)[keyof typeof QUESTION_DIFFICULTY];
 export type TQuestionType = (typeof QUESTION_TYPE)[keyof typeof QUESTION_TYPE];

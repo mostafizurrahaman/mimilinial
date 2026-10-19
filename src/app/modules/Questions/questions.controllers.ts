@@ -66,10 +66,7 @@ const createFillBlankQuestion = catchAsync(async (req, res) => {
 const createMatchingQuestion = catchAsync(async (req, res) => {
   const user = req.user;
 
-  const result = await questionsServices.createMatchingQuestion(
-    user,
-    req.body,
-  );
+  const result = await questionsServices.createMatchingQuestion(user, req.body);
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
@@ -82,10 +79,7 @@ const createMatchingQuestion = catchAsync(async (req, res) => {
 const createOrderingQuestion = catchAsync(async (req, res) => {
   const user = req.user;
 
-  const result = await questionsServices.createOrderingQuestion(
-    user,
-    req.body,
-  );
+  const result = await questionsServices.createOrderingQuestion(user, req.body);
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,

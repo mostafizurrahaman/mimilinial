@@ -1,7 +1,12 @@
 import httpStatus from "http-status";
 import type { PipelineStage } from "mongoose";
 
-import { AppError, ConflictError, NotFoundError } from "../../errors";
+import {
+  AppError,
+  BadRequest,
+  ConflictError,
+  NotFoundError,
+} from "../../errors";
 import { Question } from "./questions.model";
 import {
   QUESTION_STATUS,
@@ -101,7 +106,7 @@ const createSingleMcqQuestion = async (
   }
 
   // Generate code:
-  const code = await questionUtils.generateUniqueQuestionCode();
+  const code = await questionUtils.generateUniqueQuestionCode("SMCQ");
   const slug = questionUtils.generateSafeQuestionSlug(stem, code);
   const language = questionUtils.detectLanguage(stem);
   const planHtml = questionUtils.stripHtml(stem);
@@ -245,7 +250,7 @@ const createMultiMcqQuestion = async (
   }
 
   // Generate code:
-  const code = await questionUtils.generateUniqueQuestionCode();
+  const code = await questionUtils.generateUniqueQuestionCode("MMCQ");
   const slug = questionUtils.generateSafeQuestionSlug(stem, code);
   const language = questionUtils.detectLanguage(stem);
   const planHtml = questionUtils.stripHtml(stem);
@@ -391,7 +396,7 @@ const createTrueFalseQuestion = async (
   }
 
   // Generate unique code & slug:
-  const code = await questionUtils.generateUniqueQuestionCode();
+  const code = await questionUtils.generateUniqueQuestionCode("TF");
   const slug = questionUtils.generateSafeQuestionSlug(stem, code);
   const language = questionUtils.detectLanguage(stem);
   const planHtml = questionUtils.stripHtml(stem);
@@ -521,6 +526,12 @@ const createFillBlankQuestion = async (
     }
   }
 
+  if (!stem?.includes("___")) {
+    throw new BadRequest(
+      "Fill-in-the-gap question stem must contain at least one blank (___).",
+    );
+  }
+
   // Hash content:
   const hashedContent = questionUtils.generateContentHash({
     type: QUESTION_TYPE.FILL_BLANK,
@@ -539,7 +550,7 @@ const createFillBlankQuestion = async (
   }
 
   // Generate unique code & slug:
-  const code = await questionUtils.generateUniqueQuestionCode();
+  const code = await questionUtils.generateUniqueQuestionCode("FITB");
   const slug = questionUtils.generateSafeQuestionSlug(stem, code);
   const language = questionUtils.detectLanguage(stem);
   const planHtml = questionUtils.stripHtml(stem);
@@ -683,7 +694,7 @@ const createMatchingQuestion = async (
   }
 
   // Generate unique code & slug:
-  const code = await questionUtils.generateUniqueQuestionCode();
+  const code = await questionUtils.generateUniqueQuestionCode("MAT");
   const slug = questionUtils.generateSafeQuestionSlug(stem, code);
   const language = questionUtils.detectLanguage(stem);
   const planHtml = questionUtils.stripHtml(stem);
@@ -830,7 +841,7 @@ const createOrderingQuestion = async (
   }
 
   // Generate unique code & slug:
-  const code = await questionUtils.generateUniqueQuestionCode();
+  const code = await questionUtils.generateUniqueQuestionCode("ORD");
   const slug = questionUtils.generateSafeQuestionSlug(stem, code);
   const language = questionUtils.detectLanguage(stem);
   const planHtml = questionUtils.stripHtml(stem);

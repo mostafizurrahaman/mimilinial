@@ -7,7 +7,18 @@ import {
 } from "../Questions/questions.constants";
 
 import { questionUtils } from "../Questions/question-utils";
-import type { IFillBlankVersion, IMatchingPair, IMatchingVersion, IMultiMcqVersion, IOrderingItem, IOrderingVersion, IQuestionOption, IQuestionVersionDoc, ISingleMcqVersion, ITrueFalseVersion } from "../Questions";
+import type {
+  IFillBlankVersion,
+  IMatchingPair,
+  IMatchingVersion,
+  IMultiMcqVersion,
+  IOrderingItem,
+  IOrderingVersion,
+  IQuestionOption,
+  IQuestionVersionDoc,
+  ISingleMcqVersion,
+  ITrueFalseVersion,
+} from "../Questions";
 
 /**
  * -------------------------
@@ -123,6 +134,12 @@ const questionVersionSchema = new Schema<IQuestionVersionDoc>(
       required: true,
       trim: true,
     },
+    explanation: {
+      type: String,
+      allowNull: true,
+      default: null,
+    },
+
     contentHash: {
       type: String,
       required: true,
@@ -262,6 +279,7 @@ questionVersionSchema.index(
     question: 1,
   },
   {
+    name: "question_current_version_index",
     unique: true,
     partialFilterExpression: { isCurrent: true },
   },
@@ -324,4 +342,3 @@ export const OrderingQuestionVersion =
     QUESTION_TYPE.ORDERING,
     OrderingItemVersionSchema,
   );
-

@@ -374,7 +374,7 @@ export class QuestionUtils {
    * Generate Unique (Question Code Generate)
    */
   generateQuestionCode(prefix: string = "Q"): string {
-    return `Q-${randomBytes(8).toString("hex").toUpperCase()}`;
+    return `${prefix?.trim()}-${randomBytes(8).toString("hex").toUpperCase()}`;
   }
 
   async generateUniqueQuestionCode(prefix = "Q"): Promise<string> {
