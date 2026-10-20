@@ -20,6 +20,12 @@ import type {
   TCreateOrderingQuestionPayloadType,
   TCreateSingleMcqQuestionPayloadType,
   TCreateTrueFalseQuestionPayloadType,
+  TUpdateFillBlankQuestionPayloadType,
+  TUpdateMatchingQuestionPayloadType,
+  TUpdateMultiMcqQuestionPayloadType,
+  TUpdateOrderingQuestionPayloadType,
+  TUpdateSingleMcqQuestionPayloadType,
+  TUpdateTrueFalseQuestionPayloadType,
 } from "./questions.validations";
 import type { IUser, IUserDoc } from "../User";
 import { Passage } from "../Passage";
@@ -941,6 +947,1085 @@ const createOrderingQuestion = async (
   }
 };
 
+// 7. UPDATE SINGLE MCQ QUESTIONS
+const updateSingleMcqQuestion = async (
+  id: string,
+  user: IUserDoc,
+  payload: TUpdateSingleMcqQuestionPayloadType,
+) => {
+  const {
+    passageId,
+    stem,
+    options,
+    explanation,
+    changeLog,
+    difficulty,
+    mediaUrl,
+  } = payload;
+
+  const question = await Question.findById(id);
+  if (!question) {
+    throw new NotFoundError("Question not found.");
+  }
+
+  if (question.type !== QUESTION_TYPE.SINGLE_MCQ) {
+    throw new BadRequest(
+      `Question type mismatch. Expected ${QUESTION_TYPE.SINGLE_MCQ}, got ${question.type}.`,
+    );
+  }
+
+  if (question.status === QUESTION_STATUS.ARCHIVED) {
+    throw new BadRequest("Cannot update an archived question.");
+  }
+
+  let existingPassage = null;
+  if (passageId !== undefined) {
+    if (passageId) {
+      existingPassage = await Passage.findById(passageId);
+      if (!existingPassage) {
+        throw new NotFoundError("Passage not found.");
+      }
+    }
+  }
+
+  const currentVersion = await SingleMcqVersion.findOne({
+    question: question._id,
+    isCurrent: true,
+  });
+
+  if (!currentVersion) {
+    throw new NotFoundError("Active question version not found.");
+  }
+
+  const newStem = stem ?? currentVersion.stem;
+  const newOptions = (options as IQuestionOption[]) ?? currentVersion.options;
+  const newExplanation =
+    explanation !== undefined ? explanation : currentVersion.explanation;
+  const newMediaUrl =
+    mediaUrl !== undefined ? mediaUrl : currentVersion.mediaUrl;
+  const newDifficulty = difficulty ?? question.difficulty;
+
+  // Validate single MCQ options
+  questionUtils.validateSingleMcqOptions(newOptions);
+
+  const hashedContent = questionUtils.generateContentHash({
+    type: QUESTION_TYPE.SINGLE_MCQ,
+    stem: newStem,
+    options: newOptions,
+  });
+
+  const duplicateContent =
+    await questionVersionServices.checkDuplicateByHash(hashedContent);
+
+  if (
+    duplicateContent &&
+    duplicateContent.question?._id?.toString() !== question._id.toString()
+  ) {
+    throw new ConflictError("The question with same options already exists.");
+  }
+
+  const language = questionUtils.detectLanguage(newStem);
+  const planHtml = questionUtils.stripHtml(newStem);
+
+  let newSlug = question.slug;
+  if (stem && stem !== currentVersion.stem) {
+    newSlug = questionUtils.generateSafeQuestionSlug(newStem, question.code);
+    const duplicateSlug = await Question.exists({
+      slug: newSlug,
+      _id: { $ne: question._id },
+    });
+    if (duplicateSlug) {
+      throw new ConflictError("Slug collision occurred for this question stem.");
+    }
+  }
+
+  const mediaUrls = new Set<string>();
+  if (newMediaUrl) mediaUrls.add(newMediaUrl);
+
+  const contents: string[] = [newStem];
+  if (newExplanation) contents.push(newExplanation as string);
+  newOptions.forEach((opt) => {
+    if (opt.content) contents.push(opt.content);
+    if (opt.mediaUrl) mediaUrls.add(opt.mediaUrl);
+  });
+
+  const contentUrls = extractCloudinaryImages(contents);
+  if (contentUrls.length > 0) {
+    contentUrls.forEach((url) => mediaUrls.add(url));
+  }
+
+  const mongoSession = await mongoose.startSession();
+
+  try {
+    mongoSession.startTransaction();
+
+    question.difficulty = newDifficulty;
+    if (passageId !== undefined) {
+      question.passageId = existingPassage ? (existingPassage._id as mongoose.Types.ObjectId) : null;
+    }
+    question.slug = newSlug;
+    await question.save({ session: mongoSession });
+
+    if (question.status === QUESTION_STATUS.PUBLISHED) {
+      currentVersion.isCurrent = false;
+      await currentVersion.save({ session: mongoSession });
+
+      const newVersionNumber = currentVersion.versionNumber + 1;
+      const newVersionPayload = {
+        type: QUESTION_TYPE.SINGLE_MCQ,
+        question: question._id,
+        versionNumber: newVersionNumber,
+        isCurrent: true,
+        stem: newStem,
+        planStem: planHtml,
+        options: newOptions,
+        contentHash: hashedContent,
+        language,
+        explanation: newExplanation || null,
+        changeLog: changeLog || `Updated to version ${newVersionNumber}`,
+        mediaUrl: newMediaUrl || null,
+        author: user._id,
+      };
+
+      const newVersion = await SingleMcqVersion.create([newVersionPayload], {
+        session: mongoSession,
+      });
+
+      if (!newVersion?.[0]) {
+        throw new ConflictError("Failed to create question version");
+      }
+    } else {
+      currentVersion.stem = newStem;
+      currentVersion.planStem = planHtml;
+      currentVersion.options = newOptions;
+      currentVersion.contentHash = hashedContent;
+      currentVersion.language = language;
+      currentVersion.explanation = newExplanation || null;
+      currentVersion.mediaUrl = newMediaUrl || null;
+      if (changeLog) {
+        currentVersion.changeLog = changeLog;
+      }
+      currentVersion.author = user._id;
+      await currentVersion.save({ session: mongoSession });
+    }
+
+    await attachCloudinaryMedia(mediaUrls);
+
+    await mongoSession.commitTransaction();
+
+    return question;
+  } catch (error) {
+    if (mongoSession.inTransaction()) {
+      await mongoSession.abortTransaction();
+    }
+    throw error;
+  } finally {
+    await mongoSession.endSession();
+  }
+};
+
+// 8. UPDATE MULTI MCQ QUESTIONS
+const updateMultiMcqQuestion = async (
+  id: string,
+  user: IUserDoc,
+  payload: TUpdateMultiMcqQuestionPayloadType,
+) => {
+  const {
+    passageId,
+    stem,
+    options,
+    explanation,
+    changeLog,
+    difficulty,
+    mediaUrl,
+  } = payload;
+
+  const question = await Question.findById(id);
+  if (!question) {
+    throw new NotFoundError("Question not found.");
+  }
+
+  if (question.type !== QUESTION_TYPE.MULTI_MCQ) {
+    throw new BadRequest(
+      `Question type mismatch. Expected ${QUESTION_TYPE.MULTI_MCQ}, got ${question.type}.`,
+    );
+  }
+
+  if (question.status === QUESTION_STATUS.ARCHIVED) {
+    throw new BadRequest("Cannot update an archived question.");
+  }
+
+  let existingPassage = null;
+  if (passageId !== undefined) {
+    if (passageId) {
+      existingPassage = await Passage.findById(passageId);
+      if (!existingPassage) {
+        throw new NotFoundError("Passage not found.");
+      }
+    }
+  }
+
+  const currentVersion = await MultipleChoiceMcqVersion.findOne({
+    question: question._id,
+    isCurrent: true,
+  });
+
+  if (!currentVersion) {
+    throw new NotFoundError("Active question version not found.");
+  }
+
+  const newStem = stem ?? currentVersion.stem;
+  const newOptions = (options as IQuestionOption[]) ?? currentVersion.options;
+  const newExplanation =
+    explanation !== undefined ? explanation : currentVersion.explanation;
+  const newMediaUrl =
+    mediaUrl !== undefined ? mediaUrl : currentVersion.mediaUrl;
+  const newDifficulty = difficulty ?? question.difficulty;
+
+  // Validate multi MCQ options
+  questionUtils.validateMultiMcqOptions(newOptions);
+
+  const hashedContent = questionUtils.generateContentHash({
+    type: QUESTION_TYPE.MULTI_MCQ,
+    stem: newStem,
+    options: newOptions,
+  });
+
+  const duplicateContent =
+    await questionVersionServices.checkDuplicateByHash(hashedContent);
+
+  if (
+    duplicateContent &&
+    duplicateContent.question?._id?.toString() !== question._id.toString()
+  ) {
+    throw new ConflictError("The question with same options already exists.");
+  }
+
+  const language = questionUtils.detectLanguage(newStem);
+  const planHtml = questionUtils.stripHtml(newStem);
+
+  let newSlug = question.slug;
+  if (stem && stem !== currentVersion.stem) {
+    newSlug = questionUtils.generateSafeQuestionSlug(newStem, question.code);
+    const duplicateSlug = await Question.exists({
+      slug: newSlug,
+      _id: { $ne: question._id },
+    });
+    if (duplicateSlug) {
+      throw new ConflictError("Slug collision occurred for this question stem.");
+    }
+  }
+
+  const mediaUrls = new Set<string>();
+  if (newMediaUrl) mediaUrls.add(newMediaUrl);
+
+  const contents: string[] = [newStem];
+  if (newExplanation) contents.push(newExplanation as string);
+  newOptions.forEach((opt) => {
+    if (opt.content) contents.push(opt.content);
+    if (opt.mediaUrl) mediaUrls.add(opt.mediaUrl);
+  });
+
+  const contentUrls = extractCloudinaryImages(contents);
+  if (contentUrls.length > 0) {
+    contentUrls.forEach((url) => mediaUrls.add(url));
+  }
+
+  const mongoSession = await mongoose.startSession();
+
+  try {
+    mongoSession.startTransaction();
+
+    question.difficulty = newDifficulty;
+    if (passageId !== undefined) {
+      question.passageId = existingPassage ? (existingPassage._id as mongoose.Types.ObjectId) : null;
+    }
+    question.slug = newSlug;
+    await question.save({ session: mongoSession });
+
+    if (question.status === QUESTION_STATUS.PUBLISHED) {
+      currentVersion.isCurrent = false;
+      await currentVersion.save({ session: mongoSession });
+
+      const newVersionNumber = currentVersion.versionNumber + 1;
+      const newVersionPayload = {
+        type: QUESTION_TYPE.MULTI_MCQ,
+        question: question._id,
+        versionNumber: newVersionNumber,
+        isCurrent: true,
+        stem: newStem,
+        planStem: planHtml,
+        options: newOptions,
+        contentHash: hashedContent,
+        language,
+        explanation: newExplanation || null,
+        changeLog: changeLog || `Updated to version ${newVersionNumber}`,
+        mediaUrl: newMediaUrl || null,
+        author: user._id,
+      };
+
+      const newVersion = await MultipleChoiceMcqVersion.create(
+        [newVersionPayload],
+        { session: mongoSession },
+      );
+
+      if (!newVersion?.[0]) {
+        throw new ConflictError("Failed to create question version");
+      }
+    } else {
+      currentVersion.stem = newStem;
+      currentVersion.planStem = planHtml;
+      currentVersion.options = newOptions;
+      currentVersion.contentHash = hashedContent;
+      currentVersion.language = language;
+      currentVersion.explanation = newExplanation || null;
+      currentVersion.mediaUrl = newMediaUrl || null;
+      if (changeLog) {
+        currentVersion.changeLog = changeLog;
+      }
+      currentVersion.author = user._id;
+      await currentVersion.save({ session: mongoSession });
+    }
+
+    await attachCloudinaryMedia(mediaUrls);
+
+    await mongoSession.commitTransaction();
+
+    return question;
+  } catch (error) {
+    if (mongoSession.inTransaction()) {
+      await mongoSession.abortTransaction();
+    }
+    throw error;
+  } finally {
+    await mongoSession.endSession();
+  }
+};
+
+// 9. UPDATE TRUE FALSE QUESTIONS
+const updateTrueFalseQuestion = async (
+  id: string,
+  user: IUserDoc,
+  payload: TUpdateTrueFalseQuestionPayloadType,
+) => {
+  const {
+    passageId,
+    stem,
+    options,
+    explanation,
+    changeLog,
+    difficulty,
+    mediaUrl,
+  } = payload;
+
+  const question = await Question.findById(id);
+  if (!question) {
+    throw new NotFoundError("Question not found.");
+  }
+
+  if (question.type !== QUESTION_TYPE.TRUE_FALSE) {
+    throw new BadRequest(
+      `Question type mismatch. Expected ${QUESTION_TYPE.TRUE_FALSE}, got ${question.type}.`,
+    );
+  }
+
+  if (question.status === QUESTION_STATUS.ARCHIVED) {
+    throw new BadRequest("Cannot update an archived question.");
+  }
+
+  let existingPassage = null;
+  if (passageId !== undefined) {
+    if (passageId) {
+      existingPassage = await Passage.findById(passageId);
+      if (!existingPassage) {
+        throw new NotFoundError("Passage not found.");
+      }
+    }
+  }
+
+  const currentVersion = await TrueFalseMcqVersion.findOne({
+    question: question._id,
+    isCurrent: true,
+  });
+
+  if (!currentVersion) {
+    throw new NotFoundError("Active question version not found.");
+  }
+
+  const newStem = stem ?? currentVersion.stem;
+  const newOptions = (options as IQuestionOption[]) ?? currentVersion.options;
+  const newExplanation =
+    explanation !== undefined ? explanation : currentVersion.explanation;
+  const newMediaUrl =
+    mediaUrl !== undefined ? mediaUrl : currentVersion.mediaUrl;
+  const newDifficulty = difficulty ?? question.difficulty;
+
+  // Validate true/false options
+  questionUtils.validateTrueFalseOptions(newOptions);
+
+  const hashedContent = questionUtils.generateContentHash({
+    type: QUESTION_TYPE.TRUE_FALSE,
+    stem: newStem,
+    options: newOptions,
+  });
+
+  const duplicateContent =
+    await questionVersionServices.checkDuplicateByHash(hashedContent);
+
+  if (
+    duplicateContent &&
+    duplicateContent.question?._id?.toString() !== question._id.toString()
+  ) {
+    throw new ConflictError("The question with same options already exists.");
+  }
+
+  const language = questionUtils.detectLanguage(newStem);
+  const planHtml = questionUtils.stripHtml(newStem);
+
+  let newSlug = question.slug;
+  if (stem && stem !== currentVersion.stem) {
+    newSlug = questionUtils.generateSafeQuestionSlug(newStem, question.code);
+    const duplicateSlug = await Question.exists({
+      slug: newSlug,
+      _id: { $ne: question._id },
+    });
+    if (duplicateSlug) {
+      throw new ConflictError("Slug collision occurred for this question stem.");
+    }
+  }
+
+  const mediaUrls = new Set<string>();
+  if (newMediaUrl) mediaUrls.add(newMediaUrl);
+
+  const contents: string[] = [newStem];
+  if (newExplanation) contents.push(newExplanation as string);
+  newOptions.forEach((opt) => {
+    if (opt.content) contents.push(opt.content);
+    if (opt.mediaUrl) mediaUrls.add(opt.mediaUrl);
+  });
+
+  const contentUrls = extractCloudinaryImages(contents);
+  if (contentUrls.length > 0) {
+    contentUrls.forEach((url) => mediaUrls.add(url));
+  }
+
+  const mongoSession = await mongoose.startSession();
+
+  try {
+    mongoSession.startTransaction();
+
+    question.difficulty = newDifficulty;
+    if (passageId !== undefined) {
+      question.passageId = existingPassage ? (existingPassage._id as mongoose.Types.ObjectId) : null;
+    }
+    question.slug = newSlug;
+    await question.save({ session: mongoSession });
+
+    if (question.status === QUESTION_STATUS.PUBLISHED) {
+      currentVersion.isCurrent = false;
+      await currentVersion.save({ session: mongoSession });
+
+      const newVersionNumber = currentVersion.versionNumber + 1;
+      const newVersionPayload = {
+        type: QUESTION_TYPE.TRUE_FALSE,
+        question: question._id,
+        versionNumber: newVersionNumber,
+        isCurrent: true,
+        stem: newStem,
+        planStem: planHtml,
+        options: newOptions,
+        contentHash: hashedContent,
+        language,
+        explanation: newExplanation || null,
+        changeLog: changeLog || `Updated to version ${newVersionNumber}`,
+        mediaUrl: newMediaUrl || null,
+        author: user._id,
+      };
+
+      const newVersion = await TrueFalseMcqVersion.create(
+        [newVersionPayload],
+        { session: mongoSession },
+      );
+
+      if (!newVersion?.[0]) {
+        throw new ConflictError("Failed to create question version");
+      }
+    } else {
+      currentVersion.stem = newStem;
+      currentVersion.planStem = planHtml;
+      currentVersion.options = newOptions;
+      currentVersion.contentHash = hashedContent;
+      currentVersion.language = language;
+      currentVersion.explanation = newExplanation || null;
+      currentVersion.mediaUrl = newMediaUrl || null;
+      if (changeLog) {
+        currentVersion.changeLog = changeLog;
+      }
+      currentVersion.author = user._id;
+      await currentVersion.save({ session: mongoSession });
+    }
+
+    await attachCloudinaryMedia(mediaUrls);
+
+    await mongoSession.commitTransaction();
+
+    return question;
+  } catch (error) {
+    if (mongoSession.inTransaction()) {
+      await mongoSession.abortTransaction();
+    }
+    throw error;
+  } finally {
+    await mongoSession.endSession();
+  }
+};
+
+// 10. UPDATE FILL IN THE BLANK QUESTIONS
+const updateFillBlankQuestion = async (
+  id: string,
+  user: IUserDoc,
+  payload: TUpdateFillBlankQuestionPayloadType,
+) => {
+  const {
+    passageId,
+    stem,
+    acceptedAnswers,
+    isCaseSensitive,
+    explanation,
+    changeLog,
+    difficulty,
+    mediaUrl,
+  } = payload;
+
+  const question = await Question.findById(id);
+  if (!question) {
+    throw new NotFoundError("Question not found.");
+  }
+
+  if (question.type !== QUESTION_TYPE.FILL_BLANK) {
+    throw new BadRequest(
+      `Question type mismatch. Expected ${QUESTION_TYPE.FILL_BLANK}, got ${question.type}.`,
+    );
+  }
+
+  if (question.status === QUESTION_STATUS.ARCHIVED) {
+    throw new BadRequest("Cannot update an archived question.");
+  }
+
+  let existingPassage = null;
+  if (passageId !== undefined) {
+    if (passageId) {
+      existingPassage = await Passage.findById(passageId);
+      if (!existingPassage) {
+        throw new NotFoundError("Passage not found.");
+      }
+    }
+  }
+
+  const currentVersion = await FillBlankQuestionVersion.findOne({
+    question: question._id,
+    isCurrent: true,
+  });
+
+  if (!currentVersion) {
+    throw new NotFoundError("Active question version not found.");
+  }
+
+  const newStem = stem ?? currentVersion.stem;
+  const newAcceptedAnswers = acceptedAnswers ?? currentVersion.acceptedAnswers;
+  const newIsCaseSensitive =
+    isCaseSensitive !== undefined
+      ? isCaseSensitive
+      : currentVersion.isCaseSensitive;
+  const newExplanation =
+    explanation !== undefined ? explanation : currentVersion.explanation;
+  const newMediaUrl =
+    mediaUrl !== undefined ? mediaUrl : currentVersion.mediaUrl;
+  const newDifficulty = difficulty ?? question.difficulty;
+
+  if (!newStem.includes("___")) {
+    throw new BadRequest(
+      "Fill-in-the-gap question stem must contain at least one blank (___).",
+    );
+  }
+
+  // Validate fill-blank answers
+  questionUtils.validateFillBlankAnswers(
+    newAcceptedAnswers,
+    newIsCaseSensitive,
+  );
+
+  const hashedContent = questionUtils.generateContentHash({
+    type: QUESTION_TYPE.FILL_BLANK,
+    stem: newStem,
+    acceptedAnswers: newAcceptedAnswers,
+  });
+
+  const duplicateContent =
+    await questionVersionServices.checkDuplicateByHash(hashedContent);
+
+  if (
+    duplicateContent &&
+    duplicateContent.question?._id?.toString() !== question._id.toString()
+  ) {
+    throw new ConflictError("The question with same answers already exists.");
+  }
+
+  const language = questionUtils.detectLanguage(newStem);
+  const planHtml = questionUtils.stripHtml(newStem);
+
+  let newSlug = question.slug;
+  if (stem && stem !== currentVersion.stem) {
+    newSlug = questionUtils.generateSafeQuestionSlug(newStem, question.code);
+    const duplicateSlug = await Question.exists({
+      slug: newSlug,
+      _id: { $ne: question._id },
+    });
+    if (duplicateSlug) {
+      throw new ConflictError("Slug collision occurred for this question stem.");
+    }
+  }
+
+  const mediaUrls = new Set<string>();
+  if (newMediaUrl) mediaUrls.add(newMediaUrl);
+
+  const contents: string[] = [newStem];
+  if (newExplanation) contents.push(newExplanation as string);
+
+  const contentUrls = extractCloudinaryImages(contents);
+  if (contentUrls.length > 0) {
+    contentUrls.forEach((url) => mediaUrls.add(url));
+  }
+
+  const mongoSession = await mongoose.startSession();
+
+  try {
+    mongoSession.startTransaction();
+
+    question.difficulty = newDifficulty;
+    if (passageId !== undefined) {
+      question.passageId = existingPassage ? (existingPassage._id as mongoose.Types.ObjectId) : null;
+    }
+    question.slug = newSlug;
+    await question.save({ session: mongoSession });
+
+    if (question.status === QUESTION_STATUS.PUBLISHED) {
+      currentVersion.isCurrent = false;
+      await currentVersion.save({ session: mongoSession });
+
+      const newVersionNumber = currentVersion.versionNumber + 1;
+      const newVersionPayload = {
+        type: QUESTION_TYPE.FILL_BLANK,
+        question: question._id,
+        versionNumber: newVersionNumber,
+        isCurrent: true,
+        stem: newStem,
+        planStem: planHtml,
+        acceptedAnswers: newAcceptedAnswers,
+        isCaseSensitive: newIsCaseSensitive,
+        contentHash: hashedContent,
+        language,
+        explanation: newExplanation || null,
+        changeLog: changeLog || `Updated to version ${newVersionNumber}`,
+        mediaUrl: newMediaUrl || null,
+        author: user._id,
+      };
+
+      const newVersion = await FillBlankQuestionVersion.create(
+        [newVersionPayload],
+        { session: mongoSession },
+      );
+
+      if (!newVersion?.[0]) {
+        throw new ConflictError("Failed to create question version");
+      }
+    } else {
+      currentVersion.stem = newStem;
+      currentVersion.planStem = planHtml;
+      currentVersion.acceptedAnswers = newAcceptedAnswers;
+      currentVersion.isCaseSensitive = newIsCaseSensitive;
+      currentVersion.contentHash = hashedContent;
+      currentVersion.language = language;
+      currentVersion.explanation = newExplanation || null;
+      currentVersion.mediaUrl = newMediaUrl || null;
+      if (changeLog) {
+        currentVersion.changeLog = changeLog;
+      }
+      currentVersion.author = user._id;
+      await currentVersion.save({ session: mongoSession });
+    }
+
+    await attachCloudinaryMedia(mediaUrls);
+
+    await mongoSession.commitTransaction();
+
+    return question;
+  } catch (error) {
+    if (mongoSession.inTransaction()) {
+      await mongoSession.abortTransaction();
+    }
+    throw error;
+  } finally {
+    await mongoSession.endSession();
+  }
+};
+
+// 11. UPDATE MATCHING QUESTIONS
+const updateMatchingQuestion = async (
+  id: string,
+  user: IUserDoc,
+  payload: TUpdateMatchingQuestionPayloadType,
+) => {
+  const {
+    passageId,
+    stem,
+    pairs,
+    explanation,
+    changeLog,
+    difficulty,
+    mediaUrl,
+  } = payload;
+
+  const question = await Question.findById(id);
+  if (!question) {
+    throw new NotFoundError("Question not found.");
+  }
+
+  if (question.type !== QUESTION_TYPE.MATCHING) {
+    throw new BadRequest(
+      `Question type mismatch. Expected ${QUESTION_TYPE.MATCHING}, got ${question.type}.`,
+    );
+  }
+
+  if (question.status === QUESTION_STATUS.ARCHIVED) {
+    throw new BadRequest("Cannot update an archived question.");
+  }
+
+  let existingPassage = null;
+  if (passageId !== undefined) {
+    if (passageId) {
+      existingPassage = await Passage.findById(passageId);
+      if (!existingPassage) {
+        throw new NotFoundError("Passage not found.");
+      }
+    }
+  }
+
+  const currentVersion = await MatchingPairQuestionVersion.findOne({
+    question: question._id,
+    isCurrent: true,
+  });
+
+  if (!currentVersion) {
+    throw new NotFoundError("Active question version not found.");
+  }
+
+  const newStem = stem ?? currentVersion.stem;
+  const newPairs = (pairs as IMatchingPair[]) ?? currentVersion.pairs;
+  const newExplanation =
+    explanation !== undefined ? explanation : currentVersion.explanation;
+  const newMediaUrl =
+    mediaUrl !== undefined ? mediaUrl : currentVersion.mediaUrl;
+  const newDifficulty = difficulty ?? question.difficulty;
+
+  // Validate matching pairs
+  questionUtils.validateMatchingPairs(newPairs);
+
+  const hashedContent = questionUtils.generateContentHash({
+    type: QUESTION_TYPE.MATCHING,
+    stem: newStem,
+    pairs: newPairs,
+  });
+
+  const duplicateContent =
+    await questionVersionServices.checkDuplicateByHash(hashedContent);
+
+  if (
+    duplicateContent &&
+    duplicateContent.question?._id?.toString() !== question._id.toString()
+  ) {
+    throw new ConflictError("The question with same pairs already exists.");
+  }
+
+  const language = questionUtils.detectLanguage(newStem);
+  const planHtml = questionUtils.stripHtml(newStem);
+
+  let newSlug = question.slug;
+  if (stem && stem !== currentVersion.stem) {
+    newSlug = questionUtils.generateSafeQuestionSlug(newStem, question.code);
+    const duplicateSlug = await Question.exists({
+      slug: newSlug,
+      _id: { $ne: question._id },
+    });
+    if (duplicateSlug) {
+      throw new ConflictError("Slug collision occurred for this question stem.");
+    }
+  }
+
+  const mediaUrls = new Set<string>();
+  if (newMediaUrl) mediaUrls.add(newMediaUrl);
+
+  const contents: string[] = [newStem];
+  if (newExplanation) contents.push(newExplanation as string);
+  newPairs.forEach((p) => {
+    if (p.left) contents.push(p.left);
+    if (p.right) contents.push(p.right);
+  });
+
+  const contentUrls = extractCloudinaryImages(contents);
+  if (contentUrls.length > 0) {
+    contentUrls.forEach((url) => mediaUrls.add(url));
+  }
+
+  const mongoSession = await mongoose.startSession();
+
+  try {
+    mongoSession.startTransaction();
+
+    question.difficulty = newDifficulty;
+    if (passageId !== undefined) {
+      question.passageId = existingPassage ? (existingPassage._id as mongoose.Types.ObjectId) : null;
+    }
+    question.slug = newSlug;
+    await question.save({ session: mongoSession });
+
+    if (question.status === QUESTION_STATUS.PUBLISHED) {
+      currentVersion.isCurrent = false;
+      await currentVersion.save({ session: mongoSession });
+
+      const newVersionNumber = currentVersion.versionNumber + 1;
+      const newVersionPayload = {
+        type: QUESTION_TYPE.MATCHING,
+        question: question._id,
+        versionNumber: newVersionNumber,
+        isCurrent: true,
+        stem: newStem,
+        planStem: planHtml,
+        pairs: newPairs,
+        contentHash: hashedContent,
+        language,
+        explanation: newExplanation || null,
+        changeLog: changeLog || `Updated to version ${newVersionNumber}`,
+        mediaUrl: newMediaUrl || null,
+        author: user._id,
+      };
+
+      const newVersion = await MatchingPairQuestionVersion.create(
+        [newVersionPayload],
+        { session: mongoSession },
+      );
+
+      if (!newVersion?.[0]) {
+        throw new ConflictError("Failed to create question version");
+      }
+    } else {
+      currentVersion.stem = newStem;
+      currentVersion.planStem = planHtml;
+      currentVersion.pairs = newPairs;
+      currentVersion.contentHash = hashedContent;
+      currentVersion.language = language;
+      currentVersion.explanation = newExplanation || null;
+      currentVersion.mediaUrl = newMediaUrl || null;
+      if (changeLog) {
+        currentVersion.changeLog = changeLog;
+      }
+      currentVersion.author = user._id;
+      await currentVersion.save({ session: mongoSession });
+    }
+
+    await attachCloudinaryMedia(mediaUrls);
+
+    await mongoSession.commitTransaction();
+
+    return question;
+  } catch (error) {
+    if (mongoSession.inTransaction()) {
+      await mongoSession.abortTransaction();
+    }
+    throw error;
+  } finally {
+    await mongoSession.endSession();
+  }
+};
+
+// 12. UPDATE ORDERING QUESTIONS
+const updateOrderingQuestion = async (
+  id: string,
+  user: IUserDoc,
+  payload: TUpdateOrderingQuestionPayloadType,
+) => {
+  const {
+    passageId,
+    stem,
+    orderingItems,
+    explanation,
+    changeLog,
+    difficulty,
+    mediaUrl,
+  } = payload;
+
+  const question = await Question.findById(id);
+  if (!question) {
+    throw new NotFoundError("Question not found.");
+  }
+
+  if (question.type !== QUESTION_TYPE.ORDERING) {
+    throw new BadRequest(
+      `Question type mismatch. Expected ${QUESTION_TYPE.ORDERING}, got ${question.type}.`,
+    );
+  }
+
+  if (question.status === QUESTION_STATUS.ARCHIVED) {
+    throw new BadRequest("Cannot update an archived question.");
+  }
+
+  let existingPassage = null;
+  if (passageId !== undefined) {
+    if (passageId) {
+      existingPassage = await Passage.findById(passageId);
+      if (!existingPassage) {
+        throw new NotFoundError("Passage not found.");
+      }
+    }
+  }
+
+  const currentVersion = await OrderingQuestionVersion.findOne({
+    question: question._id,
+    isCurrent: true,
+  });
+
+  if (!currentVersion) {
+    throw new NotFoundError("Active question version not found.");
+  }
+
+  const newStem = stem ?? currentVersion.stem;
+  const newOrderingItems =
+    (orderingItems as IOrderingItem[]) ?? currentVersion.orderingItems;
+  const newExplanation =
+    explanation !== undefined ? explanation : currentVersion.explanation;
+  const newMediaUrl =
+    mediaUrl !== undefined ? mediaUrl : currentVersion.mediaUrl;
+  const newDifficulty = difficulty ?? question.difficulty;
+
+  // Validate ordering items
+  questionUtils.validateOrderingItems(newOrderingItems);
+
+  const hashedContent = questionUtils.generateContentHash({
+    type: QUESTION_TYPE.ORDERING,
+    stem: newStem,
+    orderingItems: newOrderingItems,
+  });
+
+  const duplicateContent =
+    await questionVersionServices.checkDuplicateByHash(hashedContent);
+
+  if (
+    duplicateContent &&
+    duplicateContent.question?._id?.toString() !== question._id.toString()
+  ) {
+    throw new ConflictError("The question with same items already exists.");
+  }
+
+  const language = questionUtils.detectLanguage(newStem);
+  const planHtml = questionUtils.stripHtml(newStem);
+
+  let newSlug = question.slug;
+  if (stem && stem !== currentVersion.stem) {
+    newSlug = questionUtils.generateSafeQuestionSlug(newStem, question.code);
+    const duplicateSlug = await Question.exists({
+      slug: newSlug,
+      _id: { $ne: question._id },
+    });
+    if (duplicateSlug) {
+      throw new ConflictError("Slug collision occurred for this question stem.");
+    }
+  }
+
+  const mediaUrls = new Set<string>();
+  if (newMediaUrl) mediaUrls.add(newMediaUrl);
+
+  const contents: string[] = [newStem];
+  if (newExplanation) contents.push(newExplanation as string);
+  newOrderingItems.forEach((item) => {
+    if (item.text) contents.push(item.text);
+  });
+
+  const contentUrls = extractCloudinaryImages(contents);
+  if (contentUrls.length > 0) {
+    contentUrls.forEach((url) => mediaUrls.add(url));
+  }
+
+  const mongoSession = await mongoose.startSession();
+
+  try {
+    mongoSession.startTransaction();
+
+    question.difficulty = newDifficulty;
+    if (passageId !== undefined) {
+      question.passageId = existingPassage ? (existingPassage._id as mongoose.Types.ObjectId) : null;
+    }
+    question.slug = newSlug;
+    await question.save({ session: mongoSession });
+
+    if (question.status === QUESTION_STATUS.PUBLISHED) {
+      currentVersion.isCurrent = false;
+      await currentVersion.save({ session: mongoSession });
+
+      const newVersionNumber = currentVersion.versionNumber + 1;
+      const newVersionPayload = {
+        type: QUESTION_TYPE.ORDERING,
+        question: question._id,
+        versionNumber: newVersionNumber,
+        isCurrent: true,
+        stem: newStem,
+        planStem: planHtml,
+        orderingItems: newOrderingItems,
+        contentHash: hashedContent,
+        language,
+        explanation: newExplanation || null,
+        changeLog: changeLog || `Updated to version ${newVersionNumber}`,
+        mediaUrl: newMediaUrl || null,
+        author: user._id,
+      };
+
+      const newVersion = await OrderingQuestionVersion.create(
+        [newVersionPayload],
+        { session: mongoSession },
+      );
+
+      if (!newVersion?.[0]) {
+        throw new ConflictError("Failed to create question version");
+      }
+    } else {
+      currentVersion.stem = newStem;
+      currentVersion.planStem = planHtml;
+      currentVersion.orderingItems = newOrderingItems;
+      currentVersion.contentHash = hashedContent;
+      currentVersion.language = language;
+      currentVersion.explanation = newExplanation || null;
+      currentVersion.mediaUrl = newMediaUrl || null;
+      if (changeLog) {
+        currentVersion.changeLog = changeLog;
+      }
+      currentVersion.author = user._id;
+      await currentVersion.save({ session: mongoSession });
+    }
+
+    await attachCloudinaryMedia(mediaUrls);
+
+    await mongoSession.commitTransaction();
+
+    return question;
+  } catch (error) {
+    if (mongoSession.inTransaction()) {
+      await mongoSession.abortTransaction();
+    }
+    throw error;
+  } finally {
+    await mongoSession.endSession();
+  }
+};
+
 export const questionsServices = {
   createSingleMcqQuestion,
   createMultiMcqQuestion,
@@ -948,4 +2033,11 @@ export const questionsServices = {
   createFillBlankQuestion,
   createMatchingQuestion,
   createOrderingQuestion,
+  updateSingleMcqQuestion,
+  updateMultiMcqQuestion,
+  updateTrueFalseQuestion,
+  updateFillBlankQuestion,
+  updateMatchingQuestion,
+  updateOrderingQuestion,
 };
+

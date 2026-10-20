@@ -62,12 +62,53 @@ router.post(
   questionsControllers.createOrderingQuestion,
 );
 
-// // UPDATE QUESTIONS
-// router.patch(
-//   "/:id",
-//   validateRequest(questionsValidations.updateQuestionsSchema),
-//   questionsControllers.updateQuestions,
-// );
+// 7. UPDATE SINGLE MCQ QUESTIONS
+router.patch(
+  "/single-mcq/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.updateSingleMcqQuestionSchema),
+  questionsControllers.updateSingleMcqQuestion,
+);
+
+// 8. UPDATE MULTI MCQ QUESTIONS
+router.patch(
+  "/multi-mcq/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.updateMultiMcqQuestionSchema),
+  questionsControllers.updateMultiMcqQuestion,
+);
+
+// 9. UPDATE TRUE FALSE QUESTIONS
+router.patch(
+  "/true-false/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.updateTrueFalseQuestionSchema),
+  questionsControllers.updateTrueFalseQuestion,
+);
+
+// 10. UPDATE FILL IN THE BLANK QUESTIONS
+router.patch(
+  "/fill-blank/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.updateFillBlankQuestionSchema),
+  questionsControllers.updateFillBlankQuestion,
+);
+
+// 11. UPDATE MATCHING QUESTIONS
+router.patch(
+  "/matching/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.updateMatchingQuestionSchema),
+  questionsControllers.updateMatchingQuestion,
+);
+
+// 12. UPDATE ORDERING QUESTIONS
+router.patch(
+  "/ordering/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.updateOrderingQuestionSchema),
+  questionsControllers.updateOrderingQuestion,
+);
 
 // // GET ALL QUESTIONS
 // router.get(
