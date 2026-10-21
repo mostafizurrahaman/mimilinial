@@ -53,7 +53,10 @@ import { getPublicId } from "@/app/utils/cloudinary/delete-file";
 /**
  * Safely attach Cloudinary media URLs without throwing if non-Cloudinary URLs are present
  */
-const attachCloudinaryMedia = async (mediaUrls: Set<string>) => {
+const attachCloudinaryMedia = async (
+  mediaUrls: Set<string> | string[],
+  entity?: { entityType: string; entityId: mongoose.Types.ObjectId | string },
+) => {
   const validCloudinaryUrls = Array.from(mediaUrls).filter((url) => {
     try {
       return !!getPublicId(url);
@@ -63,7 +66,27 @@ const attachCloudinaryMedia = async (mediaUrls: Set<string>) => {
   });
 
   if (validCloudinaryUrls.length > 0) {
-    await mediaServices.attachImages(validCloudinaryUrls);
+    await mediaServices.attachImages(validCloudinaryUrls, entity);
+  }
+};
+
+/**
+ * Safely unattach Cloudinary media URLs without throwing if non-Cloudinary URLs are present
+ */
+const unattachCloudinaryMedia = async (
+  mediaUrls: Set<string> | string[],
+  entity?: { entityType: string; entityId: mongoose.Types.ObjectId | string },
+) => {
+  const validCloudinaryUrls = Array.from(mediaUrls).filter((url) => {
+    try {
+      return !!getPublicId(url);
+    } catch {
+      return false;
+    }
+  });
+
+  if (validCloudinaryUrls.length > 0) {
+    await mediaServices.unattachImages(validCloudinaryUrls, entity);
   }
 };
 
@@ -195,7 +218,10 @@ const createSingleMcqQuestion = async (
       throw new ConflictError("Failed to create question version");
     }
 
-    await attachCloudinaryMedia(mediaUrls);
+    await attachCloudinaryMedia(mediaUrls, {
+      entityType: "Question",
+      entityId: question[0]._id,
+    });
 
     await mongoSession.commitTransaction();
 
@@ -342,7 +368,10 @@ const createMultiMcqQuestion = async (
       throw new ConflictError("Failed to create question version");
     }
 
-    await attachCloudinaryMedia(mediaUrls);
+    await attachCloudinaryMedia(mediaUrls, {
+      entityType: "Question",
+      entityId: question[0]._id,
+    });
 
     await mongoSession.commitTransaction();
 
@@ -487,7 +516,10 @@ const createTrueFalseQuestion = async (
       throw new ConflictError("Failed to create question version");
     }
 
-    await attachCloudinaryMedia(mediaUrls);
+    await attachCloudinaryMedia(mediaUrls, {
+      entityType: "Question",
+      entityId: question[0]._id,
+    });
 
     await mongoSession.commitTransaction();
 
@@ -638,7 +670,10 @@ const createFillBlankQuestion = async (
       throw new ConflictError("Failed to create question version");
     }
 
-    await attachCloudinaryMedia(mediaUrls);
+    await attachCloudinaryMedia(mediaUrls, {
+      entityType: "Question",
+      entityId: question[0]._id,
+    });
 
     await mongoSession.commitTransaction();
 
@@ -785,7 +820,10 @@ const createMatchingQuestion = async (
       throw new ConflictError("Failed to create question version");
     }
 
-    await attachCloudinaryMedia(mediaUrls);
+    await attachCloudinaryMedia(mediaUrls, {
+      entityType: "Question",
+      entityId: question[0]._id,
+    });
 
     await mongoSession.commitTransaction();
 
@@ -931,7 +969,10 @@ const createOrderingQuestion = async (
       throw new ConflictError("Failed to create question version");
     }
 
-    await attachCloudinaryMedia(mediaUrls);
+    await attachCloudinaryMedia(mediaUrls, {
+      entityType: "Question",
+      entityId: question[0]._id,
+    });
 
     await mongoSession.commitTransaction();
 
@@ -954,30 +995,37 @@ const updateSingleMcqQuestion = async (
   payload: TUpdateSingleMcqQuestionPayloadType,
 ) => {
   const {
+    // related to question:
     passageId,
+    difficulty,
+
+    // Related to version
     stem,
     options,
     explanation,
     changeLog,
-    difficulty,
     mediaUrl,
   } = payload;
 
+  // 1. Find the main question:
   const question = await Question.findById(id);
   if (!question) {
     throw new NotFoundError("Question not found.");
   }
 
+  // 1.1. Check Question:
   if (question.type !== QUESTION_TYPE.SINGLE_MCQ) {
     throw new BadRequest(
       `Question type mismatch. Expected ${QUESTION_TYPE.SINGLE_MCQ}, got ${question.type}.`,
     );
   }
 
+  // 2. If question status is archived, don't allow to edit:
   if (question.status === QUESTION_STATUS.ARCHIVED) {
     throw new BadRequest("Cannot update an archived question.");
   }
 
+  // 3. Check  is passage updated ?:
   let existingPassage = null;
   if (passageId !== undefined) {
     if (passageId) {
@@ -988,6 +1036,7 @@ const updateSingleMcqQuestion = async (
     }
   }
 
+  // 4. Check the current version:
   const currentVersion = await SingleMcqVersion.findOne({
     question: question._id,
     isCurrent: true,
@@ -1035,9 +1084,14 @@ const updateSingleMcqQuestion = async (
       _id: { $ne: question._id },
     });
     if (duplicateSlug) {
-      throw new ConflictError("Slug collision occurred for this question stem.");
+      throw new ConflictError(
+        "Slug collision occurred for this question stem.",
+      );
     }
   }
+
+  const previousMediaUrls =
+    questionUtils.extractMediaUrlsFromVersion(currentVersion);
 
   const mediaUrls = new Set<string>();
   if (newMediaUrl) mediaUrls.add(newMediaUrl);
@@ -1054,6 +1108,14 @@ const updateSingleMcqQuestion = async (
     contentUrls.forEach((url) => mediaUrls.add(url));
   }
 
+  const addedMediaUrls = Array.from(mediaUrls).filter(
+    (url) => !previousMediaUrls.has(url),
+  );
+
+  const removedMediaUrls = Array.from(previousMediaUrls).filter(
+    (url) => !mediaUrls.has(url),
+  );
+
   const mongoSession = await mongoose.startSession();
 
   try {
@@ -1061,7 +1123,9 @@ const updateSingleMcqQuestion = async (
 
     question.difficulty = newDifficulty;
     if (passageId !== undefined) {
-      question.passageId = existingPassage ? (existingPassage._id as mongoose.Types.ObjectId) : null;
+      question.passageId = existingPassage
+        ? (existingPassage._id as mongoose.Types.ObjectId)
+        : null;
     }
     question.slug = newSlug;
     await question.save({ session: mongoSession });
@@ -1109,7 +1173,22 @@ const updateSingleMcqQuestion = async (
       await currentVersion.save({ session: mongoSession });
     }
 
-    await attachCloudinaryMedia(mediaUrls);
+    if (addedMediaUrls.length > 0) {
+      await attachCloudinaryMedia(addedMediaUrls, {
+        entityType: "Question",
+        entityId: question._id,
+      });
+    }
+
+    if (
+      question.status !== QUESTION_STATUS.PUBLISHED &&
+      removedMediaUrls.length > 0
+    ) {
+      await unattachCloudinaryMedia(removedMediaUrls, {
+        entityType: "Question",
+        entityId: question._id,
+      });
+    }
 
     await mongoSession.commitTransaction();
 
@@ -1212,9 +1291,14 @@ const updateMultiMcqQuestion = async (
       _id: { $ne: question._id },
     });
     if (duplicateSlug) {
-      throw new ConflictError("Slug collision occurred for this question stem.");
+      throw new ConflictError(
+        "Slug collision occurred for this question stem.",
+      );
     }
   }
+
+  const previousMediaUrls =
+    questionUtils.extractMediaUrlsFromVersion(currentVersion);
 
   const mediaUrls = new Set<string>();
   if (newMediaUrl) mediaUrls.add(newMediaUrl);
@@ -1231,6 +1315,14 @@ const updateMultiMcqQuestion = async (
     contentUrls.forEach((url) => mediaUrls.add(url));
   }
 
+  const addedMediaUrls = Array.from(mediaUrls).filter(
+    (url) => !previousMediaUrls.has(url),
+  );
+
+  const removedMediaUrls = Array.from(previousMediaUrls).filter(
+    (url) => !mediaUrls.has(url),
+  );
+
   const mongoSession = await mongoose.startSession();
 
   try {
@@ -1238,7 +1330,9 @@ const updateMultiMcqQuestion = async (
 
     question.difficulty = newDifficulty;
     if (passageId !== undefined) {
-      question.passageId = existingPassage ? (existingPassage._id as mongoose.Types.ObjectId) : null;
+      question.passageId = existingPassage
+        ? (existingPassage._id as mongoose.Types.ObjectId)
+        : null;
     }
     question.slug = newSlug;
     await question.save({ session: mongoSession });
@@ -1287,7 +1381,22 @@ const updateMultiMcqQuestion = async (
       await currentVersion.save({ session: mongoSession });
     }
 
-    await attachCloudinaryMedia(mediaUrls);
+    if (addedMediaUrls.length > 0) {
+      await attachCloudinaryMedia(addedMediaUrls, {
+        entityType: "Question",
+        entityId: question._id,
+      });
+    }
+
+    if (
+      question.status !== QUESTION_STATUS.PUBLISHED &&
+      removedMediaUrls.length > 0
+    ) {
+      await unattachCloudinaryMedia(removedMediaUrls, {
+        entityType: "Question",
+        entityId: question._id,
+      });
+    }
 
     await mongoSession.commitTransaction();
 
@@ -1390,9 +1499,14 @@ const updateTrueFalseQuestion = async (
       _id: { $ne: question._id },
     });
     if (duplicateSlug) {
-      throw new ConflictError("Slug collision occurred for this question stem.");
+      throw new ConflictError(
+        "Slug collision occurred for this question stem.",
+      );
     }
   }
+
+  const previousMediaUrls =
+    questionUtils.extractMediaUrlsFromVersion(currentVersion);
 
   const mediaUrls = new Set<string>();
   if (newMediaUrl) mediaUrls.add(newMediaUrl);
@@ -1409,6 +1523,14 @@ const updateTrueFalseQuestion = async (
     contentUrls.forEach((url) => mediaUrls.add(url));
   }
 
+  const addedMediaUrls = Array.from(mediaUrls).filter(
+    (url) => !previousMediaUrls.has(url),
+  );
+
+  const removedMediaUrls = Array.from(previousMediaUrls).filter(
+    (url) => !mediaUrls.has(url),
+  );
+
   const mongoSession = await mongoose.startSession();
 
   try {
@@ -1416,7 +1538,9 @@ const updateTrueFalseQuestion = async (
 
     question.difficulty = newDifficulty;
     if (passageId !== undefined) {
-      question.passageId = existingPassage ? (existingPassage._id as mongoose.Types.ObjectId) : null;
+      question.passageId = existingPassage
+        ? (existingPassage._id as mongoose.Types.ObjectId)
+        : null;
     }
     question.slug = newSlug;
     await question.save({ session: mongoSession });
@@ -1442,10 +1566,9 @@ const updateTrueFalseQuestion = async (
         author: user._id,
       };
 
-      const newVersion = await TrueFalseMcqVersion.create(
-        [newVersionPayload],
-        { session: mongoSession },
-      );
+      const newVersion = await TrueFalseMcqVersion.create([newVersionPayload], {
+        session: mongoSession,
+      });
 
       if (!newVersion?.[0]) {
         throw new ConflictError("Failed to create question version");
@@ -1465,7 +1588,22 @@ const updateTrueFalseQuestion = async (
       await currentVersion.save({ session: mongoSession });
     }
 
-    await attachCloudinaryMedia(mediaUrls);
+    if (addedMediaUrls.length > 0) {
+      await attachCloudinaryMedia(addedMediaUrls, {
+        entityType: "Question",
+        entityId: question._id,
+      });
+    }
+
+    if (
+      question.status !== QUESTION_STATUS.PUBLISHED &&
+      removedMediaUrls.length > 0
+    ) {
+      await unattachCloudinaryMedia(removedMediaUrls, {
+        entityType: "Question",
+        entityId: question._id,
+      });
+    }
 
     await mongoSession.commitTransaction();
 
@@ -1582,9 +1720,14 @@ const updateFillBlankQuestion = async (
       _id: { $ne: question._id },
     });
     if (duplicateSlug) {
-      throw new ConflictError("Slug collision occurred for this question stem.");
+      throw new ConflictError(
+        "Slug collision occurred for this question stem.",
+      );
     }
   }
+
+  const previousMediaUrls =
+    questionUtils.extractMediaUrlsFromVersion(currentVersion);
 
   const mediaUrls = new Set<string>();
   if (newMediaUrl) mediaUrls.add(newMediaUrl);
@@ -1597,6 +1740,14 @@ const updateFillBlankQuestion = async (
     contentUrls.forEach((url) => mediaUrls.add(url));
   }
 
+  const addedMediaUrls = Array.from(mediaUrls).filter(
+    (url) => !previousMediaUrls.has(url),
+  );
+
+  const removedMediaUrls = Array.from(previousMediaUrls).filter(
+    (url) => !mediaUrls.has(url),
+  );
+
   const mongoSession = await mongoose.startSession();
 
   try {
@@ -1604,7 +1755,9 @@ const updateFillBlankQuestion = async (
 
     question.difficulty = newDifficulty;
     if (passageId !== undefined) {
-      question.passageId = existingPassage ? (existingPassage._id as mongoose.Types.ObjectId) : null;
+      question.passageId = existingPassage
+        ? (existingPassage._id as mongoose.Types.ObjectId)
+        : null;
     }
     question.slug = newSlug;
     await question.save({ session: mongoSession });
@@ -1655,7 +1808,22 @@ const updateFillBlankQuestion = async (
       await currentVersion.save({ session: mongoSession });
     }
 
-    await attachCloudinaryMedia(mediaUrls);
+    if (addedMediaUrls.length > 0) {
+      await attachCloudinaryMedia(addedMediaUrls, {
+        entityType: "Question",
+        entityId: question._id,
+      });
+    }
+
+    if (
+      question.status !== QUESTION_STATUS.PUBLISHED &&
+      removedMediaUrls.length > 0
+    ) {
+      await unattachCloudinaryMedia(removedMediaUrls, {
+        entityType: "Question",
+        entityId: question._id,
+      });
+    }
 
     await mongoSession.commitTransaction();
 
@@ -1758,9 +1926,14 @@ const updateMatchingQuestion = async (
       _id: { $ne: question._id },
     });
     if (duplicateSlug) {
-      throw new ConflictError("Slug collision occurred for this question stem.");
+      throw new ConflictError(
+        "Slug collision occurred for this question stem.",
+      );
     }
   }
+
+  const previousMediaUrls =
+    questionUtils.extractMediaUrlsFromVersion(currentVersion);
 
   const mediaUrls = new Set<string>();
   if (newMediaUrl) mediaUrls.add(newMediaUrl);
@@ -1777,6 +1950,14 @@ const updateMatchingQuestion = async (
     contentUrls.forEach((url) => mediaUrls.add(url));
   }
 
+  const addedMediaUrls = Array.from(mediaUrls).filter(
+    (url) => !previousMediaUrls.has(url),
+  );
+
+  const removedMediaUrls = Array.from(previousMediaUrls).filter(
+    (url) => !mediaUrls.has(url),
+  );
+
   const mongoSession = await mongoose.startSession();
 
   try {
@@ -1784,7 +1965,9 @@ const updateMatchingQuestion = async (
 
     question.difficulty = newDifficulty;
     if (passageId !== undefined) {
-      question.passageId = existingPassage ? (existingPassage._id as mongoose.Types.ObjectId) : null;
+      question.passageId = existingPassage
+        ? (existingPassage._id as mongoose.Types.ObjectId)
+        : null;
     }
     question.slug = newSlug;
     await question.save({ session: mongoSession });
@@ -1833,7 +2016,22 @@ const updateMatchingQuestion = async (
       await currentVersion.save({ session: mongoSession });
     }
 
-    await attachCloudinaryMedia(mediaUrls);
+    if (addedMediaUrls.length > 0) {
+      await attachCloudinaryMedia(addedMediaUrls, {
+        entityType: "Question",
+        entityId: question._id,
+      });
+    }
+
+    if (
+      question.status !== QUESTION_STATUS.PUBLISHED &&
+      removedMediaUrls.length > 0
+    ) {
+      await unattachCloudinaryMedia(removedMediaUrls, {
+        entityType: "Question",
+        entityId: question._id,
+      });
+    }
 
     await mongoSession.commitTransaction();
 
@@ -1937,9 +2135,14 @@ const updateOrderingQuestion = async (
       _id: { $ne: question._id },
     });
     if (duplicateSlug) {
-      throw new ConflictError("Slug collision occurred for this question stem.");
+      throw new ConflictError(
+        "Slug collision occurred for this question stem.",
+      );
     }
   }
+
+  const previousMediaUrls =
+    questionUtils.extractMediaUrlsFromVersion(currentVersion);
 
   const mediaUrls = new Set<string>();
   if (newMediaUrl) mediaUrls.add(newMediaUrl);
@@ -1955,6 +2158,14 @@ const updateOrderingQuestion = async (
     contentUrls.forEach((url) => mediaUrls.add(url));
   }
 
+  const addedMediaUrls = Array.from(mediaUrls).filter(
+    (url) => !previousMediaUrls.has(url),
+  );
+
+  const removedMediaUrls = Array.from(previousMediaUrls).filter(
+    (url) => !mediaUrls.has(url),
+  );
+
   const mongoSession = await mongoose.startSession();
 
   try {
@@ -1962,7 +2173,9 @@ const updateOrderingQuestion = async (
 
     question.difficulty = newDifficulty;
     if (passageId !== undefined) {
-      question.passageId = existingPassage ? (existingPassage._id as mongoose.Types.ObjectId) : null;
+      question.passageId = existingPassage
+        ? (existingPassage._id as mongoose.Types.ObjectId)
+        : null;
     }
     question.slug = newSlug;
     await question.save({ session: mongoSession });
@@ -2011,7 +2224,22 @@ const updateOrderingQuestion = async (
       await currentVersion.save({ session: mongoSession });
     }
 
-    await attachCloudinaryMedia(mediaUrls);
+    if (addedMediaUrls.length > 0) {
+      await attachCloudinaryMedia(addedMediaUrls, {
+        entityType: "Question",
+        entityId: question._id,
+      });
+    }
+
+    if (
+      question.status !== QUESTION_STATUS.PUBLISHED &&
+      removedMediaUrls.length > 0
+    ) {
+      await unattachCloudinaryMedia(removedMediaUrls, {
+        entityType: "Question",
+        entityId: question._id,
+      });
+    }
 
     await mongoSession.commitTransaction();
 
@@ -2040,4 +2268,3 @@ export const questionsServices = {
   updateMatchingQuestion,
   updateOrderingQuestion,
 };
-

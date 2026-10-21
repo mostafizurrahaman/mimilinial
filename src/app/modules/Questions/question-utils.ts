@@ -15,6 +15,7 @@ import type {
   TQuestionType,
   TQuestionVersionLanguageType,
 } from "./questions.constants";
+import { extractCloudinaryImages } from "@/app/utils/extract-cloudinary-images";
 
 export class QuestionUtils {
   /**
@@ -504,6 +505,47 @@ export class QuestionUtils {
 
     return false;
   };
+
+  /**
+   * Extract all Cloudinary media URLs from a question version document
+   */
+  extractMediaUrlsFromVersion(version: any): Set<string> {
+    const mediaUrls = new Set<string>();
+    if (!version) return mediaUrls;
+
+    if (version.mediaUrl) {
+      mediaUrls.add(version.mediaUrl);
+    }
+
+    const contents: string[] = [];
+    if (version.stem) contents.push(version.stem);
+    if (version.explanation) contents.push(version.explanation);
+
+    if (Array.isArray(version.options)) {
+      version.options.forEach((opt: any) => {
+        if (opt?.mediaUrl) mediaUrls.add(opt.mediaUrl);
+        if (opt?.content) contents.push(opt.content);
+      });
+    }
+
+    if (Array.isArray(version.pairs)) {
+      version.pairs.forEach((pair: any) => {
+        if (pair?.left) contents.push(pair.left);
+        if (pair?.right) contents.push(pair.right);
+      });
+    }
+
+    if (Array.isArray(version.orderingItems)) {
+      version.orderingItems.forEach((item: any) => {
+        if (item?.text) contents.push(item.text);
+      });
+    }
+
+    const contentUrls = extractCloudinaryImages(contents);
+    contentUrls.forEach((url) => mediaUrls.add(url));
+
+    return mediaUrls;
+  }
 }
 
 export const questionUtils = new QuestionUtils();

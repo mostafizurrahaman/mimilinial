@@ -18,6 +18,11 @@ import {
 import moment from "moment";
 import { formatQuery, logger } from "@/app/utils";
 import { deleteFilesByUrls } from "@/app/utils/cloudinary/delete-files";
+import { QuestionVersion } from "../QuestionVersion";
+import { Passage } from "../Passage";
+import { User } from "../User";
+import { Topic } from "../Topic";
+import { Subject } from "../Subject";
 
 // 1. CREATE MEDIA
 const createMedia = async (userId: Types.ObjectId, file: TMulterFile) => {
@@ -57,12 +62,16 @@ const createMedia = async (userId: Types.ObjectId, file: TMulterFile) => {
 
 // 3. Update media status:
 const updateStatus = async (urls: string[], status: TMediaStatus) => {
+  if (!urls || urls.length < 1) {
+    return;
+  }
+
   // public Ids
   const publicIds = urls.map((url) => getPublicId(url)).filter(Boolean);
 
   // validate public Ids:
-  if (publicIds?.length < 1) {
-    throw new BadRequest("No. public id found for url.");
+  if (publicIds.length < 1) {
+    return;
   }
 
   await Media.updateMany(
@@ -82,57 +91,318 @@ const updateStatus = async (urls: string[], status: TMediaStatus) => {
   );
 };
 
-// 2. Attach images by urls:
-const attachImages = async (urls: string[]) => {
-  await updateStatus(urls, MEDIA_STATUS.ATTACHED);
+export interface IAttachMediaEntity {
+  entityType: string;
+  entityId: Types.ObjectId | string;
+}
+
+// 2. Attach images by urls and link to referencing entity:
+const attachImages = async (
+  urls: string[],
+  entity?: IAttachMediaEntity,
+) => {
+  if (!urls || urls.length < 1) return;
+
+  const publicIds = urls.map((url) => getPublicId(url)).filter(Boolean);
+  if (publicIds.length < 1) return;
+
+  if (entity) {
+    // 1. Idempotently add entity to references
+    await Media.updateMany(
+      { publicId: { $in: publicIds } },
+      {
+        $addToSet: {
+          references: {
+            entityType: entity.entityType,
+            entityId: entity.entityId,
+          },
+        },
+      },
+    );
+
+    // 2. Recalculate refCount and ensure status is ATTACHED
+    await Media.updateMany(
+      { publicId: { $in: publicIds } },
+      [
+        {
+          $set: {
+            refCount: { $size: { $ifNull: ["$references", []] } },
+            status: MEDIA_STATUS.ATTACHED,
+          },
+        },
+      ],
+      { updatePipeline: true },
+    );
+  } else {
+    // Fallback if no specific entity provided
+    await Media.updateMany(
+      { publicId: { $in: publicIds } },
+      [
+        {
+          $set: {
+            refCount: { $max: [1, { $add: [{ $ifNull: ["$refCount", 0] }, 1] }] },
+            status: MEDIA_STATUS.ATTACHED,
+          },
+        },
+      ],
+      { updatePipeline: true },
+    );
+  }
 };
 
-// 3. Unattach images urls:
-const unattachImages = async (urls: string[]) => {
-  await updateStatus(urls, MEDIA_STATUS.UNATTACHED);
+// 3. Unattach images urls and unlink from referencing entity:
+const unattachImages = async (
+  urls: string[],
+  entity?: IAttachMediaEntity,
+) => {
+  if (!urls || urls.length < 1) return;
+
+  const publicIds = urls.map((url) => getPublicId(url)).filter(Boolean);
+  if (publicIds.length < 1) return;
+
+  if (entity) {
+    // 1. Pull the entity from references
+    await Media.updateMany(
+      { publicId: { $in: publicIds } },
+      {
+        $pull: {
+          references: {
+            entityType: entity.entityType,
+            entityId: entity.entityId,
+          },
+        },
+      },
+    );
+
+    // 2. Recalculate refCount and status based on remaining references
+    await Media.updateMany(
+      { publicId: { $in: publicIds } },
+      [
+        {
+          $set: {
+            refCount: { $size: { $ifNull: ["$references", []] } },
+          },
+        },
+        {
+          $set: {
+            status: {
+              $cond: {
+                if: { $lte: ["$refCount", 0] },
+                then: MEDIA_STATUS.UNATTACHED,
+                else: MEDIA_STATUS.ATTACHED,
+              },
+            },
+          },
+        },
+      ],
+      { updatePipeline: true },
+    );
+  } else {
+    // Fallback if no specific entity provided
+    await Media.updateMany(
+      { publicId: { $in: publicIds } },
+      [
+        {
+          $set: {
+            refCount: {
+              $max: [0, { $subtract: [{ $ifNull: ["$refCount", 1] }, 1] }],
+            },
+          },
+        },
+        {
+          $set: {
+            status: {
+              $cond: {
+                if: { $lte: ["$refCount", 0] },
+                then: MEDIA_STATUS.UNATTACHED,
+                else: MEDIA_STATUS.ATTACHED,
+              },
+            },
+          },
+        },
+      ],
+      { updatePipeline: true },
+    );
+  }
 };
 
-// 4. Delete unattached images via corn job (24  hour time frame) per day 100:
+/**
+ * Checks whether an image URL or its publicId is referenced anywhere in the database:
+ * - QuestionVersion (stem, explanation, options, matching pairs, ordering items, mediaUrl)
+ * - Passage (mediaUrl, ogImage, bodyBn, bodyEn)
+ * - User (profileImage)
+ * - Topic (ogImage)
+ * - Subject (ogImage)
+ */
+const isMediaReferenced = async (url: string): Promise<boolean> => {
+  if (!url) return false;
+
+  const publicId = getPublicId(url);
+  const escapedUrl = url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  const questionConditions: Record<string, any>[] = [
+    { mediaUrl: url },
+    { "options.mediaUrl": url },
+    { stem: { $regex: escapedUrl, $options: "i" } },
+    { explanation: { $regex: escapedUrl, $options: "i" } },
+    { "options.content": { $regex: escapedUrl, $options: "i" } },
+    { "pairs.left": { $regex: escapedUrl, $options: "i" } },
+    { "pairs.right": { $regex: escapedUrl, $options: "i" } },
+    { "orderingItems.text": { $regex: escapedUrl, $options: "i" } },
+  ];
+
+  if (publicId) {
+    const escapedPublicId = publicId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    questionConditions.push(
+      { mediaUrl: { $regex: escapedPublicId, $options: "i" } },
+      { "options.mediaUrl": { $regex: escapedPublicId, $options: "i" } },
+      { stem: { $regex: escapedPublicId, $options: "i" } },
+      { explanation: { $regex: escapedPublicId, $options: "i" } },
+      { "options.content": { $regex: escapedPublicId, $options: "i" } },
+      { "pairs.left": { $regex: escapedPublicId, $options: "i" } },
+      { "pairs.right": { $regex: escapedPublicId, $options: "i" } },
+      { "orderingItems.text": { $regex: escapedPublicId, $options: "i" } },
+    );
+  }
+
+  const questionExists = await QuestionVersion.exists({
+    $or: questionConditions,
+  });
+
+  if (questionExists) return true;
+
+  const passageConditions: Record<string, any>[] = [
+    { mediaUrl: url },
+    { ogImage: url },
+    { bodyBn: { $regex: escapedUrl, $options: "i" } },
+    { bodyEn: { $regex: escapedUrl, $options: "i" } },
+  ];
+
+  if (publicId) {
+    const escapedPublicId = publicId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    passageConditions.push(
+      { mediaUrl: { $regex: escapedPublicId, $options: "i" } },
+      { ogImage: { $regex: escapedPublicId, $options: "i" } },
+      { bodyBn: { $regex: escapedPublicId, $options: "i" } },
+      { bodyEn: { $regex: escapedPublicId, $options: "i" } },
+    );
+  }
+
+  const passageExists = await Passage.exists({
+    $or: passageConditions,
+  });
+
+  if (passageExists) return true;
+
+  const userConditions: Record<string, any>[] = [{ profileImage: url }];
+  if (publicId) {
+    const escapedPublicId = publicId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    userConditions.push({
+      profileImage: { $regex: escapedPublicId, $options: "i" },
+    });
+  }
+
+  const userExists = await User.exists({
+    $or: userConditions,
+  });
+
+  if (userExists) return true;
+
+  const otherConditions: Record<string, any>[] = [{ ogImage: url }];
+  if (publicId) {
+    const escapedPublicId = publicId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    otherConditions.push({
+      ogImage: { $regex: escapedPublicId, $options: "i" },
+    });
+  }
+
+  const [topicExists, subjectExists] = await Promise.all([
+    Topic.exists({ $or: otherConditions }),
+    Subject.exists({ $or: otherConditions }),
+  ]);
+
+  return !!(topicExists || subjectExists);
+};
+
+// 4. Delete unattached images via cron job (24 hour time frame) per day 100:
 const removeOrphanedImages = async () => {
-  const now = new Date()?.toLocaleDateString();
+  const now = new Date().toISOString();
   const twentyFourHourAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  // Find first 100 orphaned images:
-  const orphanedImages = await Media.find({
+  // High-performance compound index lookup: O(1) query on (status + refCount + updatedAt)
+  const candidateImages = await Media.find({
     status: MEDIA_STATUS.UNATTACHED,
-    createdAt: {
+    refCount: { $lte: 0 },
+    updatedAt: {
       $lte: twentyFourHourAgo,
     },
   })
     .select({
       _id: 1,
       url: 1,
+      publicId: 1,
     })
     .limit(100)
     .lean();
 
-  if (!orphanedImages?.length) {
-    logger.info("No orphaned images found at =>", now);
+  if (!candidateImages?.length) {
+    logger.info(`No orphaned images found for cleanup at => ${now}`);
     return;
   }
 
-  // Get all images urls:
-  const imagesUrls = orphanedImages.map((img) => img.url).filter(Boolean);
-  const imageIds = orphanedImages.map((img) => img._id).filter(Boolean);
-
-  logger.info(`Found ${imageIds.length} orphaned images. Cleaning up...`);
-
-  await deleteFilesByUrls(imagesUrls);
-
-  const deleteResult = await Media.deleteMany({
-    _id: {
-      $in: imageIds,
-    },
-  });
-
   logger.info(
-    `Successfully removed ${deleteResult.deletedCount} orphaned images at  ${now}`,
+    `Found ${candidateImages.length} unattached candidate images with 0 references for cleanup...`,
   );
+
+  const toDeleteUrls: string[] = [];
+  const toDeleteIds: Types.ObjectId[] = [];
+  const selfHealIds: Types.ObjectId[] = [];
+
+  for (const img of candidateImages) {
+    if (!img.url) continue;
+
+    const inUse = await isMediaReferenced(img.url);
+
+    if (inUse) {
+      selfHealIds.push(img._id);
+    } else {
+      toDeleteUrls.push(img.url);
+      toDeleteIds.push(img._id);
+    }
+  }
+
+  // Self-heal images that are still in use anywhere in DB
+  if (selfHealIds.length > 0) {
+    await Media.updateMany(
+      {
+        _id: { $in: selfHealIds },
+      },
+      {
+        $set: { status: MEDIA_STATUS.ATTACHED },
+      },
+    );
+    logger.info(
+      `Re-attached ${selfHealIds.length} media items that were still in use.`,
+    );
+  }
+
+  // Delete truly orphaned images
+  if (toDeleteIds.length > 0) {
+    logger.info(
+      `Found ${toDeleteIds.length} verified orphaned images. Cleaning up...`,
+    );
+    await deleteFilesByUrls(toDeleteUrls);
+
+    const deleteResult = await Media.deleteMany({
+      _id: {
+        $in: toDeleteIds,
+      },
+    });
+
+    logger.info(
+      `Successfully removed ${deleteResult.deletedCount} orphaned images at ${now}`,
+    );
+  }
 };
 
 // 3. GET ALL MEDIA
@@ -192,4 +462,5 @@ export const mediaServices = {
   attachImages,
   unattachImages,
   removeOrphanedImages,
+  isMediaReferenced,
 };

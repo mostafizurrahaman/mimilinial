@@ -827,4 +827,3 @@ export type TUpdateMatchingQuestionPayloadType = z.infer<
 export type TUpdateOrderingQuestionPayloadType = z.infer<
   typeof updateOrderingQuestionSchema.shape.body
 >;
-

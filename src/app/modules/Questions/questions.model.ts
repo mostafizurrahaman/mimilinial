@@ -46,6 +46,7 @@ const questionsSchema = new Schema<IQuestionDoc>(
       index: true,
       default: QUESTION_STATUS.DRAFT,
     },
+
     passageId: {
       type: Schema.Types.ObjectId,
       ref: "Passage",
