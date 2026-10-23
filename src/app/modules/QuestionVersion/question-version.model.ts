@@ -129,7 +129,7 @@ const questionVersionSchema = new Schema<IQuestionVersionDoc>(
       required: true,
       trim: true,
     },
-    planStem: {
+    plainStem: {
       type: String,
       required: true,
       trim: true,

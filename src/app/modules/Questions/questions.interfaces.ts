@@ -15,6 +15,8 @@ export interface IQuestion {
   passageId?: Types.ObjectId | null;
   isFlagged: boolean;
   author: Types.ObjectId;
+  publishedAt?: Date | null;
+  archivedAt?: Date | null;
 }
 
 // MCQ (Single & Multiple) && TRUE_FALSE:
@@ -43,12 +45,13 @@ export interface IQuestionVersion {
   versionNumber: number;
   isCurrent: boolean;
   stem: string;
-  planStem: string;
+  plainStem: string;
   contentHash: string;
   language: TQuestionVersionLanguageType;
   explanation?: string | null;
   mediaUrl?: string | null;
   changeLog?: string | null;
+
   author: Types.ObjectId;
 }
 

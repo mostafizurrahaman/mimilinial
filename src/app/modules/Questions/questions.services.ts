@@ -11,7 +11,9 @@ import { Question } from "./questions.model";
 import {
   QUESTION_STATUS,
   QUESTION_TYPE,
+  questionProjections,
   questionsSearchableFields,
+  questionsSortableFields,
 } from "./questions.constants";
 import type {
   TCreateFillBlankQuestionPayloadType,
@@ -20,6 +22,8 @@ import type {
   TCreateOrderingQuestionPayloadType,
   TCreateSingleMcqQuestionPayloadType,
   TCreateTrueFalseQuestionPayloadType,
+  TGetAllQuestionQueryType,
+  TGetQuestionByIDQueryType,
   TUpdateFillBlankQuestionPayloadType,
   TUpdateMatchingQuestionPayloadType,
   TUpdateMultiMcqQuestionPayloadType,
@@ -28,27 +32,32 @@ import type {
   TUpdateTrueFalseQuestionPayloadType,
 } from "./questions.validations";
 import type { IUser, IUserDoc } from "../User";
-import { Passage } from "../Passage";
+import { Passage, PASSAGE_STATUS } from "../Passage";
 import { questionUtils } from "./question-utils";
 import {
   FillBlankQuestionVersion,
   MatchingPairQuestionVersion,
   MultipleChoiceMcqVersion,
   OrderingQuestionVersion,
+  QuestionVersion,
   SingleMcqVersion,
   TrueFalseMcqVersion,
 } from "../QuestionVersion/question-version.model";
 
-import mongoose from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { extractCloudinaryImages } from "@/app/utils/extract-cloudinary-images";
 import { mediaServices } from "../Media";
 import type {
   IMatchingPair,
   IOrderingItem,
+  IQuestion,
   IQuestionOption,
+  IQuestionVersion,
 } from "./questions.interfaces";
 import { questionVersionServices } from "../QuestionVersion";
 import { getPublicId } from "@/app/utils/cloudinary/delete-file";
+import { formatQuery } from "@/app/utils";
+import moment from "moment";
 
 /**
  * Safely attach Cloudinary media URLs without throwing if non-Cloudinary URLs are present
@@ -116,6 +125,12 @@ const createSingleMcqQuestion = async (
     existingPassage = await Passage.findById(passageId);
     if (!existingPassage) {
       throw new NotFoundError("Passage not found.");
+    }
+
+    if (existingPassage.status !== PASSAGE_STATUS.PUBLISHED) {
+      throw new BadRequest(
+        `Cannot attach question to a ${existingPassage.status} passage. The passage must be published first.`,
+      );
     }
   }
 
@@ -263,6 +278,12 @@ const createMultiMcqQuestion = async (
     existingPassage = await Passage.findById(passageId);
     if (!existingPassage) {
       throw new NotFoundError("Passage not found.");
+    }
+
+    if (existingPassage.status !== PASSAGE_STATUS.PUBLISHED) {
+      throw new BadRequest(
+        `Cannot attach question to a ${existingPassage.status} passage. The passage must be published first.`,
+      );
     }
   }
 
@@ -413,6 +434,11 @@ const createTrueFalseQuestion = async (
     if (!existingPassage) {
       throw new NotFoundError("Passage not found.");
     }
+    if (existingPassage.status !== PASSAGE_STATUS.PUBLISHED) {
+      throw new BadRequest(
+        `Cannot attach question to a ${existingPassage.status} passage. The passage must be published first.`,
+      );
+    }
   }
 
   // Hash content:
@@ -561,6 +587,11 @@ const createFillBlankQuestion = async (
     existingPassage = await Passage.findById(passageId);
     if (!existingPassage) {
       throw new NotFoundError("Passage not found.");
+    }
+    if (existingPassage.status !== PASSAGE_STATUS.PUBLISHED) {
+      throw new BadRequest(
+        `Cannot attach question to a ${existingPassage.status} passage. The passage must be published first.`,
+      );
     }
   }
 
@@ -715,6 +746,11 @@ const createMatchingQuestion = async (
     if (!existingPassage) {
       throw new NotFoundError("Passage not found.");
     }
+    if (existingPassage.status !== PASSAGE_STATUS.PUBLISHED) {
+      throw new BadRequest(
+        `Cannot attach question to a ${existingPassage.status} passage. The passage must be published first.`,
+      );
+    }
   }
 
   // Hash content:
@@ -864,6 +900,11 @@ const createOrderingQuestion = async (
     existingPassage = await Passage.findById(passageId);
     if (!existingPassage) {
       throw new NotFoundError("Passage not found.");
+    }
+    if (existingPassage.status !== PASSAGE_STATUS.PUBLISHED) {
+      throw new BadRequest(
+        `Cannot attach question to a ${existingPassage.status} passage. The passage must be published first.`,
+      );
     }
   }
 
@@ -1033,6 +1074,12 @@ const updateSingleMcqQuestion = async (
       if (!existingPassage) {
         throw new NotFoundError("Passage not found.");
       }
+
+      if (existingPassage.status !== PASSAGE_STATUS.PUBLISHED) {
+        throw new BadRequest(
+          `Cannot attach question to a ${existingPassage.status} passage. The passage must be published first.`,
+        );
+      }
     }
   }
 
@@ -1053,6 +1100,29 @@ const updateSingleMcqQuestion = async (
   const newMediaUrl =
     mediaUrl !== undefined ? mediaUrl : currentVersion.mediaUrl;
   const newDifficulty = difficulty ?? question.difficulty;
+
+  // Check if version content changed:
+  const isVersionChanged = questionUtils.hasVersionContentChanged({
+    type: QUESTION_TYPE.SINGLE_MCQ,
+    currentVersion,
+    newStem,
+    newOptions,
+    newExplanation,
+    newMediaUrl,
+  });
+
+  // Check if question metadata changed:
+  const isQuestionChanged = questionUtils.hasQuestionMetadataChanged({
+    currentDifficulty: question.difficulty,
+    newDifficulty: difficulty,
+    currentPassageId: question.passageId,
+    targetPassageId: existingPassage?._id,
+    isPassageProvided: passageId !== undefined,
+  });
+
+  if (!isVersionChanged && !isQuestionChanged) {
+    throw new BadRequest("No changes detected in question or version content.");
+  }
 
   // Validate single MCQ options
   questionUtils.validateSingleMcqOptions(newOptions);
@@ -1131,46 +1201,50 @@ const updateSingleMcqQuestion = async (
     await question.save({ session: mongoSession });
 
     if (question.status === QUESTION_STATUS.PUBLISHED) {
-      currentVersion.isCurrent = false;
-      await currentVersion.save({ session: mongoSession });
+      if (isVersionChanged) {
+        currentVersion.isCurrent = false;
+        await currentVersion.save({ session: mongoSession });
 
-      const newVersionNumber = currentVersion.versionNumber + 1;
-      const newVersionPayload = {
-        type: QUESTION_TYPE.SINGLE_MCQ,
-        question: question._id,
-        versionNumber: newVersionNumber,
-        isCurrent: true,
-        stem: newStem,
-        planStem: planHtml,
-        options: newOptions,
-        contentHash: hashedContent,
-        language,
-        explanation: newExplanation || null,
-        changeLog: changeLog || `Updated to version ${newVersionNumber}`,
-        mediaUrl: newMediaUrl || null,
-        author: user._id,
-      };
+        const newVersionNumber = currentVersion.versionNumber + 1;
+        const newVersionPayload = {
+          type: QUESTION_TYPE.SINGLE_MCQ,
+          question: question._id,
+          versionNumber: newVersionNumber,
+          isCurrent: true,
+          stem: newStem,
+          planStem: planHtml,
+          options: newOptions,
+          contentHash: hashedContent,
+          language,
+          explanation: newExplanation || null,
+          changeLog: changeLog || `Updated to version ${newVersionNumber}`,
+          mediaUrl: newMediaUrl || null,
+          author: user._id,
+        };
 
-      const newVersion = await SingleMcqVersion.create([newVersionPayload], {
-        session: mongoSession,
-      });
+        const newVersion = await SingleMcqVersion.create([newVersionPayload], {
+          session: mongoSession,
+        });
 
-      if (!newVersion?.[0]) {
-        throw new ConflictError("Failed to create question version");
+        if (!newVersion?.[0]) {
+          throw new ConflictError("Failed to create question version");
+        }
       }
     } else {
-      currentVersion.stem = newStem;
-      currentVersion.planStem = planHtml;
-      currentVersion.options = newOptions;
-      currentVersion.contentHash = hashedContent;
-      currentVersion.language = language;
-      currentVersion.explanation = newExplanation || null;
-      currentVersion.mediaUrl = newMediaUrl || null;
-      if (changeLog) {
-        currentVersion.changeLog = changeLog;
+      if (isVersionChanged) {
+        currentVersion.stem = newStem;
+        currentVersion.plainStem = planHtml;
+        currentVersion.options = newOptions;
+        currentVersion.contentHash = hashedContent;
+        currentVersion.language = language;
+        currentVersion.explanation = newExplanation || null;
+        currentVersion.mediaUrl = newMediaUrl || null;
+        if (changeLog) {
+          currentVersion.changeLog = changeLog;
+        }
+        currentVersion.author = user._id;
+        await currentVersion.save({ session: mongoSession });
       }
-      currentVersion.author = user._id;
-      await currentVersion.save({ session: mongoSession });
     }
 
     if (addedMediaUrls.length > 0) {
@@ -1241,6 +1315,12 @@ const updateMultiMcqQuestion = async (
       if (!existingPassage) {
         throw new NotFoundError("Passage not found.");
       }
+
+      if (existingPassage.status !== PASSAGE_STATUS.PUBLISHED) {
+        throw new BadRequest(
+          `Cannot attach question to a ${existingPassage.status} passage. The passage must be published first.`,
+        );
+      }
     }
   }
 
@@ -1260,6 +1340,29 @@ const updateMultiMcqQuestion = async (
   const newMediaUrl =
     mediaUrl !== undefined ? mediaUrl : currentVersion.mediaUrl;
   const newDifficulty = difficulty ?? question.difficulty;
+
+  // Check if version content changed:
+  const isVersionChanged = questionUtils.hasVersionContentChanged({
+    type: QUESTION_TYPE.MULTI_MCQ,
+    currentVersion,
+    newStem,
+    newOptions,
+    newExplanation,
+    newMediaUrl,
+  });
+
+  // Check if question metadata changed:
+  const isQuestionChanged = questionUtils.hasQuestionMetadataChanged({
+    currentDifficulty: question.difficulty,
+    newDifficulty: difficulty,
+    currentPassageId: question.passageId,
+    targetPassageId: existingPassage?._id,
+    isPassageProvided: passageId !== undefined,
+  });
+
+  if (!isVersionChanged && !isQuestionChanged) {
+    throw new BadRequest("No changes detected in question or version content.");
+  }
 
   // Validate multi MCQ options
   questionUtils.validateMultiMcqOptions(newOptions);
@@ -1338,47 +1441,51 @@ const updateMultiMcqQuestion = async (
     await question.save({ session: mongoSession });
 
     if (question.status === QUESTION_STATUS.PUBLISHED) {
-      currentVersion.isCurrent = false;
-      await currentVersion.save({ session: mongoSession });
+      if (isVersionChanged) {
+        currentVersion.isCurrent = false;
+        await currentVersion.save({ session: mongoSession });
 
-      const newVersionNumber = currentVersion.versionNumber + 1;
-      const newVersionPayload = {
-        type: QUESTION_TYPE.MULTI_MCQ,
-        question: question._id,
-        versionNumber: newVersionNumber,
-        isCurrent: true,
-        stem: newStem,
-        planStem: planHtml,
-        options: newOptions,
-        contentHash: hashedContent,
-        language,
-        explanation: newExplanation || null,
-        changeLog: changeLog || `Updated to version ${newVersionNumber}`,
-        mediaUrl: newMediaUrl || null,
-        author: user._id,
-      };
+        const newVersionNumber = currentVersion.versionNumber + 1;
+        const newVersionPayload = {
+          type: QUESTION_TYPE.MULTI_MCQ,
+          question: question._id,
+          versionNumber: newVersionNumber,
+          isCurrent: true,
+          stem: newStem,
+          planStem: planHtml,
+          options: newOptions,
+          contentHash: hashedContent,
+          language,
+          explanation: newExplanation || null,
+          changeLog: changeLog || `Updated to version ${newVersionNumber}`,
+          mediaUrl: newMediaUrl || null,
+          author: user._id,
+        };
 
-      const newVersion = await MultipleChoiceMcqVersion.create(
-        [newVersionPayload],
-        { session: mongoSession },
-      );
+        const newVersion = await MultipleChoiceMcqVersion.create(
+          [newVersionPayload],
+          { session: mongoSession },
+        );
 
-      if (!newVersion?.[0]) {
-        throw new ConflictError("Failed to create question version");
+        if (!newVersion?.[0]) {
+          throw new ConflictError("Failed to create question version");
+        }
       }
     } else {
-      currentVersion.stem = newStem;
-      currentVersion.planStem = planHtml;
-      currentVersion.options = newOptions;
-      currentVersion.contentHash = hashedContent;
-      currentVersion.language = language;
-      currentVersion.explanation = newExplanation || null;
-      currentVersion.mediaUrl = newMediaUrl || null;
-      if (changeLog) {
-        currentVersion.changeLog = changeLog;
+      if (isVersionChanged) {
+        currentVersion.stem = newStem;
+        currentVersion.plainStem = planHtml;
+        currentVersion.options = newOptions;
+        currentVersion.contentHash = hashedContent;
+        currentVersion.language = language;
+        currentVersion.explanation = newExplanation || null;
+        currentVersion.mediaUrl = newMediaUrl || null;
+        if (changeLog) {
+          currentVersion.changeLog = changeLog;
+        }
+        currentVersion.author = user._id;
+        await currentVersion.save({ session: mongoSession });
       }
-      currentVersion.author = user._id;
-      await currentVersion.save({ session: mongoSession });
     }
 
     if (addedMediaUrls.length > 0) {
@@ -1449,6 +1556,12 @@ const updateTrueFalseQuestion = async (
       if (!existingPassage) {
         throw new NotFoundError("Passage not found.");
       }
+
+      if (existingPassage.status !== PASSAGE_STATUS.PUBLISHED) {
+        throw new BadRequest(
+          `Cannot attach question to a ${existingPassage.status} passage. The passage must be published first.`,
+        );
+      }
     }
   }
 
@@ -1468,6 +1581,29 @@ const updateTrueFalseQuestion = async (
   const newMediaUrl =
     mediaUrl !== undefined ? mediaUrl : currentVersion.mediaUrl;
   const newDifficulty = difficulty ?? question.difficulty;
+
+  // Check if version content changed:
+  const isVersionChanged = questionUtils.hasVersionContentChanged({
+    type: QUESTION_TYPE.TRUE_FALSE,
+    currentVersion,
+    newStem,
+    newOptions,
+    newExplanation,
+    newMediaUrl,
+  });
+
+  // Check if question metadata changed:
+  const isQuestionChanged = questionUtils.hasQuestionMetadataChanged({
+    currentDifficulty: question.difficulty,
+    newDifficulty: difficulty,
+    currentPassageId: question.passageId,
+    targetPassageId: existingPassage?._id,
+    isPassageProvided: passageId !== undefined,
+  });
+
+  if (!isVersionChanged && !isQuestionChanged) {
+    throw new BadRequest("No changes detected in question or version content.");
+  }
 
   // Validate true/false options
   questionUtils.validateTrueFalseOptions(newOptions);
@@ -1546,46 +1682,53 @@ const updateTrueFalseQuestion = async (
     await question.save({ session: mongoSession });
 
     if (question.status === QUESTION_STATUS.PUBLISHED) {
-      currentVersion.isCurrent = false;
-      await currentVersion.save({ session: mongoSession });
+      if (isVersionChanged) {
+        currentVersion.isCurrent = false;
+        await currentVersion.save({ session: mongoSession });
 
-      const newVersionNumber = currentVersion.versionNumber + 1;
-      const newVersionPayload = {
-        type: QUESTION_TYPE.TRUE_FALSE,
-        question: question._id,
-        versionNumber: newVersionNumber,
-        isCurrent: true,
-        stem: newStem,
-        planStem: planHtml,
-        options: newOptions,
-        contentHash: hashedContent,
-        language,
-        explanation: newExplanation || null,
-        changeLog: changeLog || `Updated to version ${newVersionNumber}`,
-        mediaUrl: newMediaUrl || null,
-        author: user._id,
-      };
+        const newVersionNumber = currentVersion.versionNumber + 1;
+        const newVersionPayload = {
+          type: QUESTION_TYPE.TRUE_FALSE,
+          question: question._id,
+          versionNumber: newVersionNumber,
+          isCurrent: true,
+          stem: newStem,
+          planStem: planHtml,
+          options: newOptions,
+          contentHash: hashedContent,
+          language,
+          explanation: newExplanation || null,
+          changeLog: changeLog || `Updated to version ${newVersionNumber}`,
+          mediaUrl: newMediaUrl || null,
+          author: user._id,
+        };
 
-      const newVersion = await TrueFalseMcqVersion.create([newVersionPayload], {
-        session: mongoSession,
-      });
+        const newVersion = await TrueFalseMcqVersion.create(
+          [newVersionPayload],
+          {
+            session: mongoSession,
+          },
+        );
 
-      if (!newVersion?.[0]) {
-        throw new ConflictError("Failed to create question version");
+        if (!newVersion?.[0]) {
+          throw new ConflictError("Failed to create question version");
+        }
       }
     } else {
-      currentVersion.stem = newStem;
-      currentVersion.planStem = planHtml;
-      currentVersion.options = newOptions;
-      currentVersion.contentHash = hashedContent;
-      currentVersion.language = language;
-      currentVersion.explanation = newExplanation || null;
-      currentVersion.mediaUrl = newMediaUrl || null;
-      if (changeLog) {
-        currentVersion.changeLog = changeLog;
+      if (isVersionChanged) {
+        currentVersion.stem = newStem;
+        currentVersion.plainStem = planHtml;
+        currentVersion.options = newOptions;
+        currentVersion.contentHash = hashedContent;
+        currentVersion.language = language;
+        currentVersion.explanation = newExplanation || null;
+        currentVersion.mediaUrl = newMediaUrl || null;
+        if (changeLog) {
+          currentVersion.changeLog = changeLog;
+        }
+        currentVersion.author = user._id;
+        await currentVersion.save({ session: mongoSession });
       }
-      currentVersion.author = user._id;
-      await currentVersion.save({ session: mongoSession });
     }
 
     if (addedMediaUrls.length > 0) {
@@ -1657,6 +1800,11 @@ const updateFillBlankQuestion = async (
       if (!existingPassage) {
         throw new NotFoundError("Passage not found.");
       }
+      if (existingPassage.status !== PASSAGE_STATUS.PUBLISHED) {
+        throw new BadRequest(
+          `Cannot attach question to a ${existingPassage.status} passage. The passage must be published first.`,
+        );
+      }
     }
   }
 
@@ -1680,6 +1828,30 @@ const updateFillBlankQuestion = async (
   const newMediaUrl =
     mediaUrl !== undefined ? mediaUrl : currentVersion.mediaUrl;
   const newDifficulty = difficulty ?? question.difficulty;
+
+  // Check if version content changed:
+  const isVersionChanged = questionUtils.hasVersionContentChanged({
+    type: QUESTION_TYPE.FILL_BLANK,
+    currentVersion,
+    newStem,
+    newAcceptedAnswers,
+    newIsCaseSensitive,
+    newExplanation,
+    newMediaUrl,
+  });
+
+  // Check if question metadata changed:
+  const isQuestionChanged = questionUtils.hasQuestionMetadataChanged({
+    currentDifficulty: question.difficulty,
+    newDifficulty: difficulty,
+    currentPassageId: question.passageId,
+    targetPassageId: existingPassage?._id,
+    isPassageProvided: passageId !== undefined,
+  });
+
+  if (!isVersionChanged && !isQuestionChanged) {
+    throw new BadRequest("No changes detected in question or version content.");
+  }
 
   if (!newStem.includes("___")) {
     throw new BadRequest(
@@ -1763,49 +1935,53 @@ const updateFillBlankQuestion = async (
     await question.save({ session: mongoSession });
 
     if (question.status === QUESTION_STATUS.PUBLISHED) {
-      currentVersion.isCurrent = false;
-      await currentVersion.save({ session: mongoSession });
+      if (isVersionChanged) {
+        currentVersion.isCurrent = false;
+        await currentVersion.save({ session: mongoSession });
 
-      const newVersionNumber = currentVersion.versionNumber + 1;
-      const newVersionPayload = {
-        type: QUESTION_TYPE.FILL_BLANK,
-        question: question._id,
-        versionNumber: newVersionNumber,
-        isCurrent: true,
-        stem: newStem,
-        planStem: planHtml,
-        acceptedAnswers: newAcceptedAnswers,
-        isCaseSensitive: newIsCaseSensitive,
-        contentHash: hashedContent,
-        language,
-        explanation: newExplanation || null,
-        changeLog: changeLog || `Updated to version ${newVersionNumber}`,
-        mediaUrl: newMediaUrl || null,
-        author: user._id,
-      };
+        const newVersionNumber = currentVersion.versionNumber + 1;
+        const newVersionPayload = {
+          type: QUESTION_TYPE.FILL_BLANK,
+          question: question._id,
+          versionNumber: newVersionNumber,
+          isCurrent: true,
+          stem: newStem,
+          planStem: planHtml,
+          acceptedAnswers: newAcceptedAnswers,
+          isCaseSensitive: newIsCaseSensitive,
+          contentHash: hashedContent,
+          language,
+          explanation: newExplanation || null,
+          changeLog: changeLog || `Updated to version ${newVersionNumber}`,
+          mediaUrl: newMediaUrl || null,
+          author: user._id,
+        };
 
-      const newVersion = await FillBlankQuestionVersion.create(
-        [newVersionPayload],
-        { session: mongoSession },
-      );
+        const newVersion = await FillBlankQuestionVersion.create(
+          [newVersionPayload],
+          { session: mongoSession },
+        );
 
-      if (!newVersion?.[0]) {
-        throw new ConflictError("Failed to create question version");
+        if (!newVersion?.[0]) {
+          throw new ConflictError("Failed to create question version");
+        }
       }
     } else {
-      currentVersion.stem = newStem;
-      currentVersion.planStem = planHtml;
-      currentVersion.acceptedAnswers = newAcceptedAnswers;
-      currentVersion.isCaseSensitive = newIsCaseSensitive;
-      currentVersion.contentHash = hashedContent;
-      currentVersion.language = language;
-      currentVersion.explanation = newExplanation || null;
-      currentVersion.mediaUrl = newMediaUrl || null;
-      if (changeLog) {
-        currentVersion.changeLog = changeLog;
+      if (isVersionChanged) {
+        currentVersion.stem = newStem;
+        currentVersion.plainStem = planHtml;
+        currentVersion.acceptedAnswers = newAcceptedAnswers;
+        currentVersion.isCaseSensitive = newIsCaseSensitive;
+        currentVersion.contentHash = hashedContent;
+        currentVersion.language = language;
+        currentVersion.explanation = newExplanation || null;
+        currentVersion.mediaUrl = newMediaUrl || null;
+        if (changeLog) {
+          currentVersion.changeLog = changeLog;
+        }
+        currentVersion.author = user._id;
+        await currentVersion.save({ session: mongoSession });
       }
-      currentVersion.author = user._id;
-      await currentVersion.save({ session: mongoSession });
     }
 
     if (addedMediaUrls.length > 0) {
@@ -1876,6 +2052,11 @@ const updateMatchingQuestion = async (
       if (!existingPassage) {
         throw new NotFoundError("Passage not found.");
       }
+      if (existingPassage.status !== PASSAGE_STATUS.PUBLISHED) {
+        throw new BadRequest(
+          `Cannot attach question to a ${existingPassage.status} passage. The passage must be published first.`,
+        );
+      }
     }
   }
 
@@ -1895,6 +2076,29 @@ const updateMatchingQuestion = async (
   const newMediaUrl =
     mediaUrl !== undefined ? mediaUrl : currentVersion.mediaUrl;
   const newDifficulty = difficulty ?? question.difficulty;
+
+  // Check if version content changed:
+  const isVersionChanged = questionUtils.hasVersionContentChanged({
+    type: QUESTION_TYPE.MATCHING,
+    currentVersion,
+    newStem,
+    newPairs,
+    newExplanation,
+    newMediaUrl,
+  });
+
+  // Check if question metadata changed:
+  const isQuestionChanged = questionUtils.hasQuestionMetadataChanged({
+    currentDifficulty: question.difficulty,
+    newDifficulty: difficulty,
+    currentPassageId: question.passageId,
+    targetPassageId: existingPassage?._id,
+    isPassageProvided: passageId !== undefined,
+  });
+
+  if (!isVersionChanged && !isQuestionChanged) {
+    throw new BadRequest("No changes detected in question or version content.");
+  }
 
   // Validate matching pairs
   questionUtils.validateMatchingPairs(newPairs);
@@ -1973,47 +2177,51 @@ const updateMatchingQuestion = async (
     await question.save({ session: mongoSession });
 
     if (question.status === QUESTION_STATUS.PUBLISHED) {
-      currentVersion.isCurrent = false;
-      await currentVersion.save({ session: mongoSession });
+      if (isVersionChanged) {
+        currentVersion.isCurrent = false;
+        await currentVersion.save({ session: mongoSession });
 
-      const newVersionNumber = currentVersion.versionNumber + 1;
-      const newVersionPayload = {
-        type: QUESTION_TYPE.MATCHING,
-        question: question._id,
-        versionNumber: newVersionNumber,
-        isCurrent: true,
-        stem: newStem,
-        planStem: planHtml,
-        pairs: newPairs,
-        contentHash: hashedContent,
-        language,
-        explanation: newExplanation || null,
-        changeLog: changeLog || `Updated to version ${newVersionNumber}`,
-        mediaUrl: newMediaUrl || null,
-        author: user._id,
-      };
+        const newVersionNumber = currentVersion.versionNumber + 1;
+        const newVersionPayload = {
+          type: QUESTION_TYPE.MATCHING,
+          question: question._id,
+          versionNumber: newVersionNumber,
+          isCurrent: true,
+          stem: newStem,
+          planStem: planHtml,
+          pairs: newPairs,
+          contentHash: hashedContent,
+          language,
+          explanation: newExplanation || null,
+          changeLog: changeLog || `Updated to version ${newVersionNumber}`,
+          mediaUrl: newMediaUrl || null,
+          author: user._id,
+        };
 
-      const newVersion = await MatchingPairQuestionVersion.create(
-        [newVersionPayload],
-        { session: mongoSession },
-      );
+        const newVersion = await MatchingPairQuestionVersion.create(
+          [newVersionPayload],
+          { session: mongoSession },
+        );
 
-      if (!newVersion?.[0]) {
-        throw new ConflictError("Failed to create question version");
+        if (!newVersion?.[0]) {
+          throw new ConflictError("Failed to create question version");
+        }
       }
     } else {
-      currentVersion.stem = newStem;
-      currentVersion.planStem = planHtml;
-      currentVersion.pairs = newPairs;
-      currentVersion.contentHash = hashedContent;
-      currentVersion.language = language;
-      currentVersion.explanation = newExplanation || null;
-      currentVersion.mediaUrl = newMediaUrl || null;
-      if (changeLog) {
-        currentVersion.changeLog = changeLog;
+      if (isVersionChanged) {
+        currentVersion.stem = newStem;
+        currentVersion.plainStem = planHtml;
+        currentVersion.pairs = newPairs;
+        currentVersion.contentHash = hashedContent;
+        currentVersion.language = language;
+        currentVersion.explanation = newExplanation || null;
+        currentVersion.mediaUrl = newMediaUrl || null;
+        if (changeLog) {
+          currentVersion.changeLog = changeLog;
+        }
+        currentVersion.author = user._id;
+        await currentVersion.save({ session: mongoSession });
       }
-      currentVersion.author = user._id;
-      await currentVersion.save({ session: mongoSession });
     }
 
     if (addedMediaUrls.length > 0) {
@@ -2084,6 +2292,12 @@ const updateOrderingQuestion = async (
       if (!existingPassage) {
         throw new NotFoundError("Passage not found.");
       }
+
+      if (existingPassage.status !== PASSAGE_STATUS.PUBLISHED) {
+        throw new BadRequest(
+          `Cannot attach question to a ${existingPassage.status} passage. The passage must be published first.`,
+        );
+      }
     }
   }
 
@@ -2104,6 +2318,29 @@ const updateOrderingQuestion = async (
   const newMediaUrl =
     mediaUrl !== undefined ? mediaUrl : currentVersion.mediaUrl;
   const newDifficulty = difficulty ?? question.difficulty;
+
+  // Check if version content changed:
+  const isVersionChanged = questionUtils.hasVersionContentChanged({
+    type: QUESTION_TYPE.ORDERING,
+    currentVersion,
+    newStem,
+    newOrderingItems,
+    newExplanation,
+    newMediaUrl,
+  });
+
+  // Check if question metadata changed:
+  const isQuestionChanged = questionUtils.hasQuestionMetadataChanged({
+    currentDifficulty: question.difficulty,
+    newDifficulty: difficulty,
+    currentPassageId: question.passageId,
+    targetPassageId: existingPassage?._id,
+    isPassageProvided: passageId !== undefined,
+  });
+
+  if (!isVersionChanged && !isQuestionChanged) {
+    throw new BadRequest("No changes detected in question or version content.");
+  }
 
   // Validate ordering items
   questionUtils.validateOrderingItems(newOrderingItems);
@@ -2181,47 +2418,51 @@ const updateOrderingQuestion = async (
     await question.save({ session: mongoSession });
 
     if (question.status === QUESTION_STATUS.PUBLISHED) {
-      currentVersion.isCurrent = false;
-      await currentVersion.save({ session: mongoSession });
+      if (isVersionChanged) {
+        currentVersion.isCurrent = false;
+        await currentVersion.save({ session: mongoSession });
 
-      const newVersionNumber = currentVersion.versionNumber + 1;
-      const newVersionPayload = {
-        type: QUESTION_TYPE.ORDERING,
-        question: question._id,
-        versionNumber: newVersionNumber,
-        isCurrent: true,
-        stem: newStem,
-        planStem: planHtml,
-        orderingItems: newOrderingItems,
-        contentHash: hashedContent,
-        language,
-        explanation: newExplanation || null,
-        changeLog: changeLog || `Updated to version ${newVersionNumber}`,
-        mediaUrl: newMediaUrl || null,
-        author: user._id,
-      };
+        const newVersionNumber = currentVersion.versionNumber + 1;
+        const newVersionPayload = {
+          type: QUESTION_TYPE.ORDERING,
+          question: question._id,
+          versionNumber: newVersionNumber,
+          isCurrent: true,
+          stem: newStem,
+          planStem: planHtml,
+          orderingItems: newOrderingItems,
+          contentHash: hashedContent,
+          language,
+          explanation: newExplanation || null,
+          changeLog: changeLog || `Updated to version ${newVersionNumber}`,
+          mediaUrl: newMediaUrl || null,
+          author: user._id,
+        };
 
-      const newVersion = await OrderingQuestionVersion.create(
-        [newVersionPayload],
-        { session: mongoSession },
-      );
+        const newVersion = await OrderingQuestionVersion.create(
+          [newVersionPayload],
+          { session: mongoSession },
+        );
 
-      if (!newVersion?.[0]) {
-        throw new ConflictError("Failed to create question version");
+        if (!newVersion?.[0]) {
+          throw new ConflictError("Failed to create question version");
+        }
       }
     } else {
-      currentVersion.stem = newStem;
-      currentVersion.planStem = planHtml;
-      currentVersion.orderingItems = newOrderingItems;
-      currentVersion.contentHash = hashedContent;
-      currentVersion.language = language;
-      currentVersion.explanation = newExplanation || null;
-      currentVersion.mediaUrl = newMediaUrl || null;
-      if (changeLog) {
-        currentVersion.changeLog = changeLog;
+      if (isVersionChanged) {
+        currentVersion.stem = newStem;
+        currentVersion.plainStem = planHtml;
+        currentVersion.orderingItems = newOrderingItems;
+        currentVersion.contentHash = hashedContent;
+        currentVersion.language = language;
+        currentVersion.explanation = newExplanation || null;
+        currentVersion.mediaUrl = newMediaUrl || null;
+        if (changeLog) {
+          currentVersion.changeLog = changeLog;
+        }
+        currentVersion.author = user._id;
+        await currentVersion.save({ session: mongoSession });
       }
-      currentVersion.author = user._id;
-      await currentVersion.save({ session: mongoSession });
     }
 
     if (addedMediaUrls.length > 0) {
@@ -2254,6 +2495,319 @@ const updateOrderingQuestion = async (
   }
 };
 
+// 12. GET QUESTION BY ID:
+const getQuestionByID = async (
+  id: string,
+  query: TGetQuestionByIDQueryType,
+) => {
+  const { includeAllVersion } = query;
+
+  console.log(includeAllVersion);
+  const question = await Question.findById(id);
+  if (!question) {
+    throw new NotFoundError("Question not found.");
+  }
+
+  const formattedResponse: Record<string, unknown> = {
+    question,
+  };
+
+  if (includeAllVersion) {
+    const versions = await QuestionVersion.find({
+      question: question?._id,
+    });
+
+    formattedResponse["versions"] = versions || [];
+  }
+
+  // find the latest version
+  const currentVersion = await QuestionVersion.findOne({
+    isCurrent: true,
+    question: question?._id,
+  });
+
+  formattedResponse["currentVersion"] = currentVersion ?? null;
+
+  return formattedResponse;
+};
+
+// 13. GET ALL QUESTIONS:
+const getAllQuestionsFromDB = async (query: TGetAllQuestionQueryType) => {
+  const {
+    code,
+    difficulty,
+    slug,
+    author,
+    passageId,
+    status,
+    isFlagged,
+    type,
+    projection,
+  } = query;
+  const { page, limit, skip, searchTerm, fromDate, toDate, sortBy, sortOrder } =
+    formatQuery(query, questionsSortableFields);
+
+  const pipeline: PipelineStage[] = [];
+  const matchingStage: PipelineStage.Match = { $match: {} };
+
+  // Filter by code:
+  if (code) {
+    matchingStage.$match["code"] = code;
+  }
+
+  // Filter by difficulty:
+  if (difficulty) {
+    matchingStage.$match["difficulty"] = difficulty;
+  }
+
+  // Filter by difficulty:
+  if (slug) {
+    matchingStage.$match["slug"] = slug;
+  }
+
+  // Filter by difficulty:
+  if (author) {
+    matchingStage.$match["author"] = new Types.ObjectId(author);
+  }
+
+  // Filter by difficulty:
+  if (passageId) {
+    matchingStage.$match["passageId"] = new Types.ObjectId(passageId);
+  }
+
+  // Filter by status
+  if (status) {
+    matchingStage.$match["status"] = status;
+  }
+
+  // Filter by status
+  if (type) {
+    matchingStage.$match["type"] = type;
+  }
+
+  // Filter by flagged:
+  if (isFlagged) {
+    matchingStage.$match["isFlagged"] = isFlagged;
+  }
+
+  // Do date filtering:
+  if (fromDate || toDate) {
+    const dateFilter: Record<string, Date> = {};
+
+    if (fromDate)
+      dateFilter["$gte"] = moment(fromDate, "YYYY-MM-DD")
+        .startOf("day")
+        ?.toDate();
+
+    if (toDate)
+      dateFilter["$lte"] = moment(toDate, "YYYY-MM-DD").endOf("day")?.toDate();
+
+    if (Object.keys(dateFilter)?.length > 1)
+      matchingStage.$match["createdAt"] = dateFilter;
+  }
+
+  pipeline.push(matchingStage);
+
+  // Lookup passage:
+  pipeline.push(
+    {
+      $lookup: {
+        from: "passages",
+        localField: "passageId",
+        foreignField: "_id",
+        as: "passageDetails",
+      },
+    },
+    {
+      $unwind: {
+        path: "$passageDetails",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+  );
+
+  // Search Now:
+  if (searchTerm) {
+    pipeline.push({
+      $match: {
+        $or: [
+          ...questionsSearchableFields,
+          "passageDetails.titleEn",
+          "passageDetails.titleBn",
+        ].map((field) => {
+          return {
+            [field]: {
+              $regex: searchTerm,
+              $options: "i",
+            },
+          };
+        }),
+      },
+    });
+  }
+
+  // Lookup passage:
+  pipeline.push(
+    {
+      $lookup: {
+        from: "users",
+        localField: "author",
+        foreignField: "_id",
+        as: "authorDetails",
+      },
+    },
+    {
+      $unwind: {
+        path: "$authorDetails",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+  );
+
+  // Lookup Question Version:
+  pipeline.push(
+    {
+      $lookup: {
+        from: "questionversions",
+        as: "currentVersion",
+        let: { questionId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $eq: ["$$questionId", "$question"],
+              },
+              isCurrent: true,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: "$currentVersion",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+  );
+
+  const projectedFields =
+    questionProjections[
+      (projection as "list" | "options" | "details") || "list"
+    ];
+
+  pipeline.push({ $project: projectedFields });
+
+  // Sorting:
+  pipeline.push({
+    $sort: {
+      [sortBy]: sortOrder,
+    },
+  });
+
+  pipeline.push({
+    $facet: {
+      data: [{ $skip: skip }, { $limit: limit }],
+      meta: [{ $count: "total" }],
+    },
+  });
+
+  const aggregated = await Question.aggregate(pipeline);
+
+  const data = aggregated?.[0]?.data || [];
+  const total = aggregated?.[0]?.meta?.[0]?.total || 0;
+
+  return {
+    data,
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit) || 1,
+    },
+  };
+};
+
+// 14. Get all  published questions:
+const getAllPublishedQuestionsFromDB = async (
+  query: TGetAllQuestionQueryType,
+) => {
+  return await getAllQuestionsFromDB({
+    ...query,
+    status: QUESTION_STATUS.PUBLISHED,
+  });
+};
+
+// 15. Publish a question:
+const publishQuestionByID = async (id: string) => {
+  // 1. Get question:
+  const question = await Question.findById(id);
+
+  if (!question) {
+    throw new NotFoundError("Question not found.");
+  }
+
+  // 2. Check question status:
+  if (question.status === QUESTION_STATUS.PUBLISHED) {
+    throw new BadRequest("This question has already been published.");
+  }
+
+  // 3. Check Is question is archived?:
+  if (question.status === QUESTION_STATUS.ARCHIVED) {
+    throw new BadRequest("You can not publish an archived question.");
+  }
+
+  // Retrieved the passage:
+  if (question.passageId) {
+    //  retrieved the passage:
+    const passage = await Passage.findById(question.passageId);
+
+    if (!passage) {
+      throw new NotFoundError("Passage not found.");
+    }
+
+    if (passage.status !== PASSAGE_STATUS.PUBLISHED) {
+      throw new BadRequest(
+        `You cannot publish this question because the passage is currently ${passage.status}.`,
+      );
+    }
+  }
+
+  question.status = QUESTION_STATUS.PUBLISHED;
+  question.publishedAt = new Date();
+
+  await question.save();
+
+  return question;
+};
+
+// 16. Archived a question:
+const archivedQuestionByID = async (id: string) => {
+  // 1. Get question:
+  const question = await Question.findById(id);
+
+  if (!question) {
+    throw new NotFoundError("Question not found.");
+  }
+
+  // 2. Check question status:
+  if (question.status === QUESTION_STATUS.ARCHIVED) {
+    throw new BadRequest("This question has already been archived.");
+  }
+
+  // 3. Check Is question is archived?:
+  if (question.status === QUESTION_STATUS.DRAFT) {
+    throw new BadRequest("You can not publish a drafted question.");
+  }
+
+  question.status = QUESTION_STATUS.ARCHIVED;
+  question.archivedAt = new Date();
+
+  await question.save();
+
+  return question;
+};
+
 export const questionsServices = {
   createSingleMcqQuestion,
   createMultiMcqQuestion,
@@ -2267,4 +2821,12 @@ export const questionsServices = {
   updateFillBlankQuestion,
   updateMatchingQuestion,
   updateOrderingQuestion,
+
+  getQuestionByID,
+  getAllQuestionsFromDB,
+  getAllPublishedQuestionsFromDB,
+
+  // Status :
+  publishQuestionByID,
+  archivedQuestionByID,
 };

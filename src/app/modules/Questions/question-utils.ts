@@ -546,6 +546,199 @@ export class QuestionUtils {
 
     return mediaUrls;
   }
+
+  /**
+   * Check if the new version payload has any actual content changes compared to currentVersion.
+   * Compares stem, options (content, isCorrect, mediaUrl, sortOrder),
+   * acceptedAnswers, isCaseSensitive, pairs, orderingItems, explanation, and mediaUrl.
+   */
+  hasVersionContentChanged(payload: {
+    type: TQuestionType;
+    currentVersion: any;
+    newStem: string;
+    newExplanation?: string | null;
+    newMediaUrl?: string | null;
+    newOptions?: IQuestionOption[];
+    newAcceptedAnswers?: string[];
+    newIsCaseSensitive?: boolean;
+    newPairs?: IMatchingPair[];
+    newOrderingItems?: IOrderingItem[];
+  }): boolean {
+    const normalizeStr = (str?: string | null): string => {
+      if (!str) return "";
+      return str.trim();
+    };
+
+    const {
+      type,
+      currentVersion,
+      newStem,
+      newExplanation,
+      newMediaUrl,
+      newOptions,
+      newAcceptedAnswers,
+      newIsCaseSensitive,
+      newPairs,
+      newOrderingItems,
+    } = payload;
+
+    if (!currentVersion) return true;
+
+    // 1. Stem comparison
+    if (normalizeStr(currentVersion.stem) !== normalizeStr(newStem)) {
+      return true;
+    }
+
+    // 2. Explanation comparison (treat undefined, null, and empty string uniformly)
+    if (
+      normalizeStr(currentVersion.explanation) !== normalizeStr(newExplanation)
+    ) {
+      return true;
+    }
+
+    // 3. Media URL comparison
+    if (normalizeStr(currentVersion.mediaUrl) !== normalizeStr(newMediaUrl)) {
+      return true;
+    }
+
+    // 4. Type-specific comparisons
+    switch (type) {
+      case "single_mcq":
+      case "multi_mcq":
+      case "true_false": {
+        const currentOpts: IQuestionOption[] = currentVersion.options || [];
+        const nextOpts: IQuestionOption[] = newOptions || [];
+
+        if (currentOpts.length !== nextOpts.length) {
+          return true;
+        }
+
+        for (let i = 0; i < nextOpts.length; i++) {
+          const cur = currentOpts[i];
+          const next = nextOpts[i];
+
+          if (normalizeStr(cur?.content) !== normalizeStr(next?.content)) {
+            return true;
+          }
+          if (Boolean(cur?.isCorrect) !== Boolean(next?.isCorrect)) {
+            return true;
+          }
+          if (normalizeStr(cur?.mediaUrl) !== normalizeStr(next?.mediaUrl)) {
+            return true;
+          }
+          if (
+            next?.sortOrder !== undefined &&
+            cur?.sortOrder !== next?.sortOrder
+          ) {
+            return true;
+          }
+        }
+        break;
+      }
+
+      case "fill_blank": {
+        if (
+          newIsCaseSensitive !== undefined &&
+          Boolean(currentVersion.isCaseSensitive) !==
+            Boolean(newIsCaseSensitive)
+        ) {
+          return true;
+        }
+
+        const currentAnswers: string[] = currentVersion.acceptedAnswers || [];
+        const nextAnswers: string[] = newAcceptedAnswers || [];
+
+        if (currentAnswers.length !== nextAnswers.length) {
+          return true;
+        }
+
+        for (let i = 0; i < nextAnswers.length; i++) {
+          if (
+            normalizeStr(currentAnswers[i]) !== normalizeStr(nextAnswers[i])
+          ) {
+            return true;
+          }
+        }
+        break;
+      }
+
+      case "matching": {
+        const currentPairs: IMatchingPair[] = currentVersion.pairs || [];
+        const nextPairs: IMatchingPair[] = newPairs || [];
+
+        if (currentPairs.length !== nextPairs.length) {
+          return true;
+        }
+
+        for (let i = 0; i < nextPairs.length; i++) {
+          const cur = currentPairs[i];
+          const next = nextPairs[i];
+
+          if (
+            normalizeStr(cur?.left) !== normalizeStr(next?.left) ||
+            normalizeStr(cur?.right) !== normalizeStr(next?.right)
+          ) {
+            return true;
+          }
+        }
+        break;
+      }
+
+      case "ordering": {
+        const currentItems: IOrderingItem[] =
+          currentVersion.orderingItems || [];
+        const nextItems: IOrderingItem[] = newOrderingItems || [];
+
+        if (currentItems.length !== nextItems.length) {
+          return true;
+        }
+
+        for (let i = 0; i < nextItems.length; i++) {
+          const cur = currentItems[i];
+          const next = nextItems[i];
+
+          if (normalizeStr(cur?.text) !== normalizeStr(next?.text)) {
+            return true;
+          }
+          if (cur?.correctOrder !== next?.correctOrder) {
+            return true;
+          }
+        }
+        break;
+      }
+
+      default:
+        break;
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if Question model fields (difficulty, passageId) have changed
+   */
+  hasQuestionMetadataChanged(payload: {
+    currentDifficulty: string;
+    newDifficulty?: string;
+    currentPassageId?: any;
+    targetPassageId?: any;
+    isPassageProvided: boolean;
+  }): boolean {
+    const isDifficultyChanged =
+      payload.newDifficulty !== undefined &&
+      payload.newDifficulty !== payload.currentDifficulty;
+
+    const curPassageStr = payload.currentPassageId
+      ? payload.currentPassageId.toString()
+      : null;
+    const targetPassageStr = payload.targetPassageId
+      ? payload.targetPassageId.toString()
+      : null;
+    const isPassageChanged =
+      payload.isPassageProvided && curPassageStr !== targetPassageStr;
+
+    return isDifficultyChanged || isPassageChanged;
+  }
 }
 
 export const questionUtils = new QuestionUtils();

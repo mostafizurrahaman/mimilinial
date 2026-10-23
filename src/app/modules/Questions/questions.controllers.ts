@@ -1,6 +1,7 @@
 import httpStatus from "http-status";
 import { questionsServices } from "./questions.services";
 import { sendResponse, catchAsync } from "../../utils";
+import type { TGetQuestionByIDQueryType } from "./questions.validations";
 
 // 1. CREATE SINGLE MCQ QUESTIONS
 const createSingleMcqQuestion = catchAsync(async (req, res) => {
@@ -190,6 +191,76 @@ const updateOrderingQuestion = catchAsync(async (req, res) => {
   });
 });
 
+// 13. GET QUESTION BY ID:
+const getQuestionByID = catchAsync(async (req, res) => {
+  const { id } = req.params;
+
+  const result = await questionsServices.getQuestionByID(
+    id as string,
+    req?.query as unknown as TGetQuestionByIDQueryType,
+  );
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: "The question is retrieved successfully!",
+    data: result,
+  });
+});
+
+// 14. GET ALL QUESTIONS:
+const getAllQuestions = catchAsync(async (req, res) => {
+  const query = req.validQuery;
+
+  const result = await questionsServices.getAllQuestionsFromDB(query);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: "The questions are retrieved successfully!",
+    data: result.data,
+    meta: result.meta,
+  });
+});
+
+// 15. GET ALL QUESTIONS:
+const getAllPublishedQuestions = catchAsync(async (req, res) => {
+  const query = req.validQuery;
+
+  const result = await questionsServices.getAllPublishedQuestionsFromDB(query);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: "The questions are retrieved successfully!",
+    data: result.data,
+    meta: result.meta,
+  });
+});
+
+// 16. Mark as published:
+const markAsPublished = catchAsync(async (req, res) => {
+  const { id } = req.params;
+
+  const result = await questionsServices.publishQuestionByID(id as string);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: "The question has been published.",
+    data: result,
+  });
+});
+
+// 17. Mark as published:
+const markAsArchived = catchAsync(async (req, res) => {
+  const { id } = req.params;
+
+  const result = await questionsServices.archivedQuestionByID(id as string);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: "The question has been archived.",
+    data: result,
+  });
+});
+
 export const questionsControllers = {
   createSingleMcqQuestion,
   createMultiMcqQuestion,
@@ -203,5 +274,10 @@ export const questionsControllers = {
   updateFillBlankQuestion,
   updateMatchingQuestion,
   updateOrderingQuestion,
-};
 
+  getQuestionByID,
+  getAllQuestions,
+  getAllPublishedQuestions,
+  markAsPublished,
+  markAsArchived,
+};

@@ -1,5 +1,7 @@
 import {
   enumString,
+  optionalDate,
+  optionalEnumString,
   optionalString,
   positiveNumber,
   requiredMongooseId,
@@ -7,7 +9,13 @@ import {
   requiredString,
 } from "@/app/utils";
 import z from "zod";
-import { QUESTION_DIFFICULTY_VALUES } from "./questions.constants";
+import {
+  QUESTION_DIFFICULTY_VALUES,
+  QUESTION_STATUS_VALUES,
+  QUESTION_TYPE_VALUES,
+  questionProjectionValues,
+  questionsSortableFields,
+} from "./questions.constants";
 import { sanitizeHtmlContent } from "./sanitize-html";
 import { questionUtils } from "./question-utils";
 import type {
@@ -15,6 +23,7 @@ import type {
   IOrderingItem,
   IQuestionOption,
 } from "./questions.interfaces";
+import { sortOrderValues } from "@/app/constants";
 
 // Base Schema common fields:
 const baseQuestionSchema = z.object({
@@ -756,6 +765,81 @@ const updateOrderingQuestionSchema = z.object({
     }),
 });
 
+// Get question by ID:
+const getQuestionByIDSchema = z.object({
+  params: z.object({
+    id: requiredMongooseId("Question ID"),
+  }),
+  query: z.object({
+    includeAllVersion: requiredStrBoolean("Include all version").default(false),
+  }),
+});
+
+// Get all the questions from db:
+const getAllQuestionsSchema = z.object({
+  query: z.object({
+    code: optionalString("Code"),
+    slug: optionalString("Slug"),
+    type: optionalEnumString(QUESTION_TYPE_VALUES, "Question type"),
+    difficulty: optionalEnumString(QUESTION_DIFFICULTY_VALUES, "Difficulty"),
+    status: optionalEnumString(QUESTION_STATUS_VALUES, "Status"),
+    passageId: requiredMongooseId("Passage ID").optional(),
+    isFlagged: requiredStrBoolean("Is Flagged").optional(),
+    author: requiredMongooseId("Author").optional(),
+
+    // search term:
+    searchTerm: optionalString("Search term"),
+    sortBy: optionalEnumString(questionsSortableFields, "Sort By"),
+    sortOrder: optionalEnumString(sortOrderValues, "Sort Order"),
+    fromDate: optionalDate("From date"),
+    toDate: optionalDate("To date"),
+
+    // Projection:
+    projection: optionalEnumString(
+      questionProjectionValues,
+      "Projection Type",
+    ).default("list"),
+  }),
+});
+
+// Get all the questions from db:
+const getAllPublishedQuestionsSchema = z.object({
+  query: z.object({
+    code: optionalString("Code"),
+    slug: optionalString("Slug"),
+    type: optionalEnumString(QUESTION_TYPE_VALUES, "Question type"),
+    difficulty: optionalEnumString(QUESTION_DIFFICULTY_VALUES, "Difficulty"),
+    passageId: requiredMongooseId("Passage ID").optional(),
+    isFlagged: requiredStrBoolean("Is Flagged").optional(),
+    author: requiredMongooseId("Author").optional(),
+
+    // search term:
+    searchTerm: optionalString("Search term"),
+    sortBy: optionalEnumString(questionsSortableFields, "Sort By"),
+    sortOrder: optionalEnumString(sortOrderValues, "Sort Order"),
+    fromDate: optionalDate("From date"),
+    toDate: optionalDate("To date"),
+
+    // Projection:
+    projection: optionalEnumString(
+      questionProjectionValues,
+      "Projection Type",
+    ).default("list"),
+  }),
+});
+
+const markQuestionAsPublishedByIdSchema = z.object({
+  params: z.object({
+    id: requiredMongooseId("Question ID"),
+  }),
+});
+
+const markQuestionAsArchivedByIdSchema = z.object({
+  params: z.object({
+    id: requiredMongooseId("Question ID"),
+  }),
+});
+
 // Export all schemas:
 export const questionValidations = {
   createSingleMcqQuestionSchema,
@@ -773,6 +857,13 @@ export const questionValidations = {
   updateFillBlankQuestionSchema,
   updateMatchingQuestionSchema,
   updateOrderingQuestionSchema,
+
+  // Get Schema:
+  getQuestionByIDSchema,
+  getAllQuestionsSchema,
+  getAllPublishedQuestionsSchema,
+  markQuestionAsPublishedByIdSchema,
+  markQuestionAsArchivedByIdSchema,
 };
 
 // Export all payload types:
@@ -826,4 +917,12 @@ export type TUpdateMatchingQuestionPayloadType = z.infer<
 
 export type TUpdateOrderingQuestionPayloadType = z.infer<
   typeof updateOrderingQuestionSchema.shape.body
+>;
+
+export type TGetQuestionByIDQueryType = z.infer<
+  typeof getQuestionByIDSchema.shape.query
+>;
+
+export type TGetAllQuestionQueryType = z.infer<
+  typeof getAllQuestionsSchema.shape.query
 >;

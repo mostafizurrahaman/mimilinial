@@ -64,6 +64,14 @@ const questionsSchema = new Schema<IQuestionDoc>(
       ref: "User",
       required: true,
     },
+    publishedAt: {
+      type: Date,
+      allowNull: true,
+    },
+    archivedAt: {
+      type: Date,
+      allowNull: true,
+    },
   },
   {
     timestamps: true,

@@ -110,19 +110,44 @@ router.patch(
   questionsControllers.updateOrderingQuestion,
 );
 
-// // GET ALL QUESTIONS
-// router.get(
-//   "/all",
-//   validateRequest(questionsValidations.getAllQuestionsSchema),
-//   questionsControllers.getAllQuestions,
-// );
+// GET ALL QUESTIONS
+router.get(
+  "/all",
+  auth(),
+  validateRequest(questionValidations.getAllQuestionsSchema),
+  questionsControllers.getAllQuestions,
+);
+
+// GET ALL QUESTIONS
+router.get(
+  "/published",
+  auth(),
+  validateRequest(questionValidations.getAllPublishedQuestionsSchema),
+  questionsControllers.getAllPublishedQuestions,
+);
 
 // // GET QUESTIONS BY ID
-// router.get(
-//   "/:id",
-//   validateRequest(questionsValidations.getQuestionsByIdSchema),
-//   questionsControllers.getQuestionsById,
-// );
+router.get(
+  "/:id",
+  validateRequest(questionValidations.getQuestionByIDSchema),
+  questionsControllers.getQuestionByID,
+);
+
+// // Mark question as published:
+router.patch(
+  "/:id/published",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.markQuestionAsPublishedByIdSchema),
+  questionsControllers.markAsPublished,
+);
+
+// // Mark question as archived:
+router.patch(
+  "/:id/archived",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.markQuestionAsArchivedByIdSchema),
+  questionsControllers.markAsArchived,
+);
 
 // // DELETE QUESTIONS BY ID
 // router.delete(
