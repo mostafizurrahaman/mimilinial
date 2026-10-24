@@ -1,7 +1,5 @@
-import { Document } from 'mongoose';
+import { Document } from "mongoose";
 
-export interface IQuestionMapping {
-  
-}
+export interface IQuestionMapping {}
 
 export interface IQuestionMappingDoc extends Document, IQuestionMapping {}
