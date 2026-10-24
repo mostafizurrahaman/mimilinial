@@ -2797,7 +2797,7 @@ const archivedQuestionByID = async (id: string) => {
 
   // 3. Check Is question is archived?:
   if (question.status === QUESTION_STATUS.DRAFT) {
-    throw new BadRequest("You can not publish a drafted question.");
+    throw new BadRequest("You can not archive a drafted question.");
   }
 
   question.status = QUESTION_STATUS.ARCHIVED;
