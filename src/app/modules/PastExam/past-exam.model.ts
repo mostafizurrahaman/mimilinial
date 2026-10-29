@@ -13,22 +13,22 @@ const pastExamSchema = new Schema<IPastExamDoc>(
     track: {
       type: Schema.Types.ObjectId,
       ref: "Track",
-      allowNull: true,
-      default: true,
+      default: null,
       index: true,
     },
     nameBn: {
       type: String,
       required: true,
+      trim: true,
     },
     nameEn: {
       type: String,
       required: true,
+      trim: true,
     },
     slug: {
       type: String,
       required: true,
-      slug: true,
       index: true,
       unique: true,
       trim: true,
@@ -40,10 +40,11 @@ const pastExamSchema = new Schema<IPastExamDoc>(
       minlength: 4,
       maxLength: 4,
       index: true,
+      trim: true,
     },
     description: {
       type: String,
-      allowNull: true,
+      default: null,
     },
     totalQuestions: {
       type: Number,
@@ -54,11 +55,20 @@ const pastExamSchema = new Schema<IPastExamDoc>(
       type: String,
       enum: EXAM_STATUS_VALUES,
       default: EXAM_STATUS.DRAFT,
+      index: true,
     },
     author: {
       type: Schema.Types.ObjectId,
-      ref: "Category",
+      ref: "User",
       required: true,
+    },
+    publishedAt: {
+      type: Date,
+      default: null,
+    },
+    archivedAt: {
+      type: Date,
+      default: null,
     },
   },
   {
@@ -72,11 +82,12 @@ pastExamSchema.index(
     category: 1,
     track: 1,
     year: 1,
-    slug: 1,
   },
   {
-    unique: true,
-    name: "unique_past_exam_per_year",
+    name: "past_exam_category_track_year_index",
   },
 );
+
+pastExamSchema.index({ status: 1 });
+
 export const PastExam = model<IPastExamDoc>("PastExam", pastExamSchema);

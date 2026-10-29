@@ -21,30 +21,62 @@ router.post(
   pastExamControllers.createPastExam,
 );
 
-// 2. UPDATE PAST EXAM
+// 2. MARK AS PUBLISHED
+router.patch(
+  "/:id/published",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(pastExamValidations.markPastExamAsPublishedSchema),
+  pastExamControllers.markAsPublished,
+);
+
+// 3. MARK AS ARCHIVED
+router.patch(
+  "/:id/archived",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(pastExamValidations.markPastExamAsArchivedSchema),
+  pastExamControllers.markAsArchived,
+);
+
+// 4. UPDATE PAST EXAM
 router.patch(
   "/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
   validateRequest(pastExamValidations.updatePastExamSchema),
   pastExamControllers.updatePastExam,
 );
 
-// 3. GET ALL PAST EXAM
+// 5. GET ALL PAST EXAM
 router.get(
   "/all",
   validateRequest(pastExamValidations.getAllPastExamSchema),
   pastExamControllers.getAllPastExam,
 );
 
-// 4. GET PAST EXAM BY ID
+// 6. GET ALL PUBLISHED PAST EXAM
+router.get(
+  "/published",
+  validateRequest(pastExamValidations.getAllPublishedPastExamSchema),
+  pastExamControllers.getAllPublishedPastExam,
+);
+
+// 7. GET PAST EXAM BY SLUG
+router.get(
+  "/:slug/public",
+  validateRequest(pastExamValidations.getPastExamBySlugSchema),
+  pastExamControllers.getPastExamBySlug,
+);
+
+// 8. GET PAST EXAM BY ID
 router.get(
   "/:id",
   validateRequest(pastExamValidations.getPastExamByIdSchema),
   pastExamControllers.getPastExamById,
 );
 
-// 5. DELETE PAST EXAM BY ID
+// 9. DELETE PAST EXAM BY ID
 router.delete(
   "/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
   validateRequest(pastExamValidations.deletePastExamByIdSchema),
   pastExamControllers.deletePastExamById,
 );

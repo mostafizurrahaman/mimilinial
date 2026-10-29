@@ -1,0 +1,436 @@
+{
+  "info": {
+    "_postman_id": "a9e62c11-7b3f-42e9-9a28-e4b75298a001",
+    "name": "Prostuti Hub - Past Exam Module",
+    "description": "Collection of all API endpoints for the Past Exam module in Prostuti Hub, including authentication, CRUD operations, publishing, archiving, and public listing.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "categoryId",
+      "value": "671aa1111111111111111111",
+      "type": "string"
+    },
+    {
+      "key": "trackId",
+      "value": "671bb2222222222222222222",
+      "type": "string"
+    },
+    {
+      "key": "pastExamId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pastExamSlug",
+      "value": "45th-bcs-preliminary-examination-2023",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Admin Login (Get Token)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const res = pm.response.json();",
+              "    const token = res.data?.accessToken || res.data?.token;",
+              "    if (token) {",
+              "        pm.collectionVariables.set(\"accessToken\", token);",
+              "        console.log(\"Access token stored in collection variable 'accessToken'\");",
+              "    }",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"mostafizurrahaman0401@gmail.com\",\n  \"password\": \"test123@PASS\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "login"]
+        },
+        "description": "Logs in as admin to automatically populate the `accessToken` collection variable."
+      },
+      "response": []
+    },
+    {
+      "name": "1. Create Past Exam",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "    const res = pm.response.json();",
+              "    if (res.data?._id) {",
+              "        pm.collectionVariables.set(\"pastExamId\", res.data._id);",
+              "        console.log(\"pastExamId set to:\", res.data._id);",
+              "    }",
+              "    if (res.data?.slug) {",
+              "        pm.collectionVariables.set(\"pastExamSlug\", res.data.slug);",
+              "        console.log(\"pastExamSlug set to:\", res.data.slug);",
+              "    }",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"category\": \"{{categoryId}}\",\n  \"track\": \"{{trackId}}\",\n  \"nameEn\": \"45th BCS Preliminary Examination\",\n  \"nameBn\": \"৪৫তম বিসিএস প্রিলিমিনারি পরীক্ষা\",\n  \"year\": \"2023\",\n  \"description\": \"<p>Official past exam question paper for 45th BCS Preliminary examination.</p>\",\n  \"totalQuestions\": 200\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/past-exam",
+          "host": ["{{baseUrl}}"],
+          "path": ["past-exam"]
+        },
+        "description": "Creates a new past exam in `draft` status under a published category (and optional published track). Automatically sets `pastExamId` and `pastExamSlug` on success."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Get All Past Exams (Admin / Full)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/past-exam/all?page=1&limit=10&sortBy=createdAt&sortOrder=desc&projection=details",
+          "host": ["{{baseUrl}}"],
+          "path": ["past-exam", "all"],
+          "query": [
+            {
+              "key": "page",
+              "value": "1",
+              "description": "Page number (min: 1)"
+            },
+            {
+              "key": "limit",
+              "value": "10",
+              "description": "Page size limit (max: 100)"
+            },
+            {
+              "key": "sortBy",
+              "value": "createdAt",
+              "description": "Sort field: createdAt, updatedAt, nameEn, nameBn, year, totalQuestions, status, categoryStatus, trackStatus, publishedAt, archivedAt"
+            },
+            {
+              "key": "sortOrder",
+              "value": "desc",
+              "description": "Sort order: asc or desc"
+            },
+            {
+              "key": "searchTerm",
+              "value": "BCS",
+              "description": "Search keyword for exam/category/track name, year, description",
+              "disabled": true
+            },
+            {
+              "key": "category",
+              "value": "{{categoryId}}",
+              "description": "Filter by Category ID",
+              "disabled": true
+            },
+            {
+              "key": "track",
+              "value": "{{trackId}}",
+              "description": "Filter by Track ID",
+              "disabled": true
+            },
+            {
+              "key": "year",
+              "value": "2023",
+              "description": "Filter by exam year",
+              "disabled": true
+            },
+            {
+              "key": "status",
+              "value": "draft",
+              "description": "Filter by status: draft, published, archived",
+              "disabled": true
+            },
+            {
+              "key": "categoryStatus",
+              "value": "published",
+              "description": "Filter by category status",
+              "disabled": true
+            },
+            {
+              "key": "trackStatus",
+              "value": "published",
+              "description": "Filter by track status",
+              "disabled": true
+            },
+            {
+              "key": "projection",
+              "value": "details",
+              "description": "Projection level: details, list, or options"
+            }
+          ]
+        },
+        "description": "Retrieves a paginated list of all past exams with comprehensive query filtering, sorting, and projection controls."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Get All Published Past Exams (Public)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/past-exam/published?page=1&limit=10&sortBy=year&sortOrder=desc&projection=list",
+          "host": ["{{baseUrl}}"],
+          "path": ["past-exam", "published"],
+          "query": [
+            {
+              "key": "page",
+              "value": "1",
+              "description": "Page number"
+            },
+            {
+              "key": "limit",
+              "value": "10",
+              "description": "Items per page"
+            },
+            {
+              "key": "sortBy",
+              "value": "year",
+              "description": "Sort field"
+            },
+            {
+              "key": "sortOrder",
+              "value": "desc",
+              "description": "Sort order"
+            },
+            {
+              "key": "searchTerm",
+              "value": "",
+              "description": "Search keyword",
+              "disabled": true
+            },
+            {
+              "key": "category",
+              "value": "{{categoryId}}",
+              "description": "Filter by category",
+              "disabled": true
+            },
+            {
+              "key": "track",
+              "value": "{{trackId}}",
+              "description": "Filter by track",
+              "disabled": true
+            },
+            {
+              "key": "year",
+              "value": "2023",
+              "description": "Filter by year",
+              "disabled": true
+            },
+            {
+              "key": "projection",
+              "value": "list",
+              "description": "Projection type: list, options, or details"
+            }
+          ]
+        },
+        "description": "Public endpoint to retrieve only published past exams that reside under published categories."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Get Past Exam by ID",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/past-exam/{{pastExamId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["past-exam", "{{pastExamId}}"]
+        },
+        "description": "Retrieves single past exam details by MongoDB ID, with category, track, and author populated."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Get Past Exam by Slug (Public)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/past-exam/{{pastExamSlug}}/public",
+          "host": ["{{baseUrl}}"],
+          "path": ["past-exam", "{{pastExamSlug}}", "public"]
+        },
+        "description": "Public endpoint to fetch a single past exam by its slug."
+      },
+      "response": []
+    },
+    {
+      "name": "6. Update Past Exam",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "    const res = pm.response.json();",
+              "    if (res.data?.slug) {",
+              "        pm.collectionVariables.set(\"pastExamSlug\", res.data.slug);",
+              "        console.log(\"pastExamSlug updated to:\", res.data.slug);",
+              "    }",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nameEn\": \"45th BCS Preliminary Examination (Revised)\",\n  \"nameBn\": \"৪৫তম বিসিএস প্রিলিমিনারি পরীক্ষা (সংশোধিত)\",\n  \"year\": \"2023\",\n  \"description\": \"<p>Updated description for 45th BCS Preliminary examination.</p>\",\n  \"totalQuestions\": 200\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/past-exam/{{pastExamId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["past-exam", "{{pastExamId}}"]
+        },
+        "description": "Updates past exam fields. Changing `nameEn` or `year` automatically recalculates the unique slug."
+      },
+      "response": []
+    },
+    {
+      "name": "7. Mark as Published",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/past-exam/{{pastExamId}}/published",
+          "host": ["{{baseUrl}}"],
+          "path": ["past-exam", "{{pastExamId}}", "published"]
+        },
+        "description": "Publishes the past exam. Requires that its category (and track, if attached) is already published."
+      },
+      "response": []
+    },
+    {
+      "name": "8. Mark as Archived",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PATCH",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/past-exam/{{pastExamId}}/archived",
+          "host": ["{{baseUrl}}"],
+          "path": ["past-exam", "{{pastExamId}}", "archived"]
+        },
+        "description": "Archives a published past exam. Draft past exams cannot be archived directly."
+      },
+      "response": []
+    },
+    {
+      "name": "9. Delete Past Exam",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{accessToken}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/past-exam/{{pastExamId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["past-exam", "{{pastExamId}}"]
+        },
+        "description": "Permanently deletes a past exam by ID."
+      },
+      "response": []
+    }
+  ]
+}
+

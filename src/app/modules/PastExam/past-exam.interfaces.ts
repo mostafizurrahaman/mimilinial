@@ -9,8 +9,10 @@ export interface IPastExam {
   slug: string;
   year: string;
   totalQuestions: number;
-  description?: string;
+  description?: string | null;
   status: TExamStatusType;
+  publishedAt?: Date | null;
+  archivedAt?: Date | null;
   author: Types.ObjectId;
 }
 
