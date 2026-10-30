@@ -19,7 +19,9 @@ const createQuestionMapping = catchAsync(async (req, res) => {
 
 // 2. UPDATE QUESTION MAPPING
 const updateQuestionMapping = catchAsync(async (req, res) => {
+  const user = req.user;
   const result = await questionMappingServices.updateQuestionMapping(
+    user,
     req.params.id as string,
     req.body,
   );

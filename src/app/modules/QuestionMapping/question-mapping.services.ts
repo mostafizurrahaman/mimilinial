@@ -310,20 +310,274 @@ const createQuestionMapping = async (
 
 // 2. UPDATE QUESTION MAPPING
 const updateQuestionMapping = async (
+  user: IUserDoc,
   id: string,
   payload: TUpdateQuestionMappingPayloadType,
 ) => {
-  const result = await QuestionMapping.findOneAndUpdate(
-    { _id: id },
-    { $set: payload },
-    { new: true },
-  );
-
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, "QuestionMapping not found");
+  // 1. Get Mapped Question BY ID
+  const existingMapping = await QuestionMapping.findById(id);
+  if (!existingMapping) {
+    throw new NotFoundError("Question mapping not found.");
   }
 
-  return result;
+  // 2.  (Effective / Target)
+  const targetQuestionId = payload.question ?? existingMapping.question;
+  const targetCollectionId = payload.coll ?? existingMapping.coll;
+  const targetCategoryId = payload.category ?? existingMapping.category;
+  const targetTrackId =
+    payload.track !== undefined ? payload.track : existingMapping.track;
+  const targetSubjectId = payload.subject ?? existingMapping.subject;
+  const targetTopicId = payload.topic ?? existingMapping.topic;
+  const targetPastExamId =
+    payload.pastExam !== undefined
+      ? payload.pastExam
+      : existingMapping.pastExam;
+
+  // 3. Do Parallel Fetch:
+  const [
+    effectiveQuestion,
+    questionVersion,
+    effectiveCollection,
+    effectiveCategory,
+    effectiveTrack,
+    effectiveSubject,
+    effectiveTopic,
+    effectivePastExam,
+  ] = await Promise.all([
+    Question.findById(targetQuestionId),
+    QuestionVersion.findOne({ question: targetQuestionId, isCurrent: true }),
+    Collection.findById(targetCollectionId),
+    Category.findById(targetCategoryId),
+    targetTrackId ? Track.findById(targetTrackId) : Promise.resolve(null),
+    Subject.findById(targetSubjectId),
+    Topic.findById(targetTopicId),
+    targetPastExamId
+      ? PastExam.findById(targetPastExamId)
+      : Promise.resolve(null),
+  ]);
+
+  // 4. Question validation
+  if (!effectiveQuestion) {
+    throw new NotFoundError("Question not found.");
+  }
+  if (effectiveQuestion.status !== QUESTION_STATUS.PUBLISHED) {
+    throw new BadRequest(
+      `Cannot map an unpublished question. Current status: "${effectiveQuestion.status}".`,
+    );
+  }
+  if (!questionVersion) {
+    throw new NotFoundError("There is no active version for this question.");
+  }
+
+  // 5. Collection Validation
+  if (!effectiveCollection) {
+    throw new NotFoundError("Collection not found.");
+  }
+
+  if (effectiveCollection.status !== COLLECTION_STATUS.PUBLISHED) {
+    throw new BadRequest(
+      `Cannot map under an unpublished collection. Current status: "${effectiveCollection.status}".`,
+    );
+  }
+
+  // 6. Category Validation:
+  if (!effectiveCategory) {
+    throw new NotFoundError("Category not found.");
+  }
+
+  if (effectiveCategory.status !== categoryStatus.PUBLISHED) {
+    throw new BadRequest(
+      `Cannot map under an unpublished category. Current status: "${effectiveCategory.status}".`,
+    );
+  }
+
+  if (
+    effectiveCategory.collectionId?.toString() !==
+    effectiveCollection._id.toString()
+  ) {
+    throw new BadRequest(
+      "The selected category does not belong to the selected collection.",
+    );
+  }
+
+  // 7. Track Validation:
+  if (targetTrackId) {
+    if (!effectiveTrack) {
+      throw new NotFoundError("Track not found.");
+    }
+    if (effectiveTrack.status !== trackStatus.PUBLISHED) {
+      throw new BadRequest(
+        `Cannot map under an unpublished track. Current status: "${effectiveTrack.status}".`,
+      );
+    }
+    if (
+      effectiveTrack.category?.toString() !== effectiveCategory._id.toString()
+    ) {
+      throw new BadRequest(
+        "The selected track does not belong to the selected category.",
+      );
+    }
+  }
+
+  // 8. Subject Validation
+  if (!effectiveSubject) {
+    throw new NotFoundError("Subject not found.");
+  }
+  if (effectiveSubject.status !== SUBJECT_STATUS.PUBLISHED) {
+    throw new BadRequest(
+      `Cannot map an unpublished subject. Current status: "${effectiveSubject.status}".`,
+    );
+  }
+
+  // 9. Topic Validation
+  if (!effectiveTopic) {
+    throw new NotFoundError("Topic not found.");
+  }
+  if (effectiveTopic.status !== TOPIC_STATUS.PUBLISHED) {
+    throw new BadRequest(
+      `Cannot map an unpublished topic. Current status: "${effectiveTopic.status}".`,
+    );
+  }
+  if (effectiveTopic.subject?.toString() !== effectiveSubject._id.toString()) {
+    throw new BadRequest(
+      "The selected topic does not belong to the selected subject.",
+    );
+  }
+
+  // 10. Past Exam validation and select year.
+  let correctedYear =
+    payload.year !== undefined ? payload.year : existingMapping.year;
+
+  if (targetPastExamId) {
+    if (!effectivePastExam) {
+      throw new NotFoundError("Past exam not found.");
+    }
+    if (effectivePastExam.status !== EXAM_STATUS.PUBLISHED) {
+      throw new BadRequest(
+        `Cannot map under an unpublished past exam. Current status: "${effectivePastExam.status}".`,
+      );
+    }
+    if (
+      effectivePastExam.category?.toString() !==
+      effectiveCategory._id.toString()
+    ) {
+      throw new BadRequest(
+        "The selected past exam does not belong to the selected category.",
+      );
+    }
+
+    // Track null safe-call:
+    const pastExamTrackStr = effectivePastExam.track
+      ? effectivePastExam.track.toString()
+      : null;
+    const selectedTrackStr = effectiveTrack
+      ? effectiveTrack._id.toString()
+      : null;
+
+    if (pastExamTrackStr !== selectedTrackStr) {
+      throw new BadRequest(
+        "The selected past exam's track does not match the effective track.",
+      );
+    }
+
+    // PastExam
+    correctedYear = effectivePastExam.year;
+  }
+
+  // 10. Duplicate map checking:
+  const isDuplicate = await QuestionMapping.exists({
+    _id: { $ne: id },
+    question: effectiveQuestion._id,
+    category: effectiveCategory._id,
+    track: effectiveTrack?._id ?? null,
+    subject: effectiveSubject._id,
+    topic: effectiveTopic._id,
+    pastExam: effectivePastExam?._id ?? null,
+  });
+
+  if (isDuplicate) {
+    throw new ConflictError(
+      "Another mapping already exists with this exact question, topic, and examination context.",
+    );
+  }
+
+  // 12. Detect PastExam Change:
+  const oldPastExamId = existingMapping.pastExam
+    ? existingMapping.pastExam.toString()
+    : null;
+  const newPastExamId = effectivePastExam
+    ? effectivePastExam._id.toString()
+    : null;
+  const isPastExamChanged = oldPastExamId !== newPastExamId;
+
+  // 13. Database Transaction:
+  const mongoSession = await mongoose.startSession();
+
+  try {
+    mongoSession.startTransaction();
+
+    // 13.1. If past exam changed,shift  the mapped question count to new past exam
+    if (isPastExamChanged && newPastExamId) {
+      const incrementedExam = await PastExam.findOneAndUpdate(
+        {
+          _id: newPastExamId,
+          $expr: { $lt: ["$mappedQuestions", "$totalQuestions"] },
+        },
+        { $inc: { mappedQuestions: 1 } },
+        { session: mongoSession, new: true },
+      );
+
+      if (!incrementedExam) {
+        throw new BadRequest(
+          `Cannot map to the new past exam. It has already reached its limit of ${effectivePastExam?.totalQuestions} questions.`,
+        );
+      }
+    }
+
+    // 3. Decrement From Previous Exam:
+    if (isPastExamChanged && oldPastExamId) {
+      await PastExam.findByIdAndUpdate(
+        oldPastExamId,
+        { $inc: { mappedQuestions: -1 } },
+        { session: mongoSession },
+      );
+    }
+
+    // 4. Update the question
+    const updatedMapping = await QuestionMapping.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          question: effectiveQuestion._id,
+          coll: effectiveCollection._id,
+          category: effectiveCategory._id,
+          track: effectiveTrack?._id || null,
+          subject: effectiveSubject._id,
+          topic: effectiveTopic._id,
+          pastExam: effectivePastExam?._id || null,
+          year: correctedYear,
+          marks: payload.marks ?? existingMapping.marks,
+          sortOrder: payload.sortOrder ?? existingMapping.sortOrder,
+          author: user._id,
+        },
+      },
+      { session: mongoSession, new: true, runValidators: true },
+    );
+
+    if (!updatedMapping) {
+      throw new NotFoundError("Failed to update question mapping.");
+    }
+
+    await mongoSession.commitTransaction();
+    return updatedMapping;
+  } catch (error) {
+    if (mongoSession.inTransaction()) {
+      await mongoSession.abortTransaction();
+    }
+    throw error;
+  } finally {
+    await mongoSession.endSession();
+  }
 };
 
 // 3. GET ALL QUESTION MAPPING

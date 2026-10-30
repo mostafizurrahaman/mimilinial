@@ -7,6 +7,7 @@ import {
   optionalDate,
   requiredMongooseId,
   requiredNumber,
+  multipleMongooseId,
 } from "../../utils";
 import { questionMappingSortableFields } from "./question-mapping.constants";
 import { sortOrderValues } from "../../constants";
@@ -37,7 +38,29 @@ const updateQuestionMappingSchema = z.object({
   params: z.object({
     id: requiredString("ID"),
   }),
-  body: z.object({}),
+  body: z.object({
+    question: requiredMongooseId("Question ID").optional(),
+    coll: requiredString("Collection ID").optional(),
+    category: requiredMongooseId("Category ID").optional(),
+    track: requiredMongooseId("Track ID").optional().optional(),
+    subject: requiredMongooseId("Subject ID").optional(),
+    topic: requiredMongooseId("Topic ID").optional(),
+    pastExam: requiredMongooseId("Past Exam").optional().optional(),
+    year: requiredString("Year")
+      .regex(
+        /^(19[7-9]\d|20\d{2}|2100)$/,
+        "Provide a valid year between 1971 and 2100.",
+      )
+      .optional(),
+    marks: requiredNumber("Marks")
+      .min(0.25, "Marks must be at least 0.25.")
+      .optional()
+      .default(1),
+    sortOrder: requiredNumber("Sort order")
+      .min(0, "Sort Order must be at least 0.")
+      .optional()
+      .default(0),
+  }),
 });
 
 // 3. GET ALL QUESTION MAPPING
@@ -50,6 +73,21 @@ const getAllQuestionMappingSchema = z.object({
     sortBy: optionalEnumString(questionMappingSortableFields, "Sort by"),
     fromDate: optionalDate("From date"),
     toDate: optionalDate("To date"),
+
+    // Question IDS:
+    question: multipleMongooseId("Question ID").optional(),
+    coll: multipleMongooseId("Collection ID").optional(),
+    category: multipleMongooseId("Category ID").optional(),
+    track: multipleMongooseId("Track ID").optional(),
+    subject: multipleMongooseId("Subject ID").optional(),
+    topic: multipleMongooseId("Topic ID").optional(),
+    pastExam: multipleMongooseId("Past Exam").optional(),
+    year: requiredString("Year")
+      .regex(
+        /^(19[7-9]\d|20\d{2}|2100)$/,
+        "Provide a valid year between 1971 and 2100.",
+      )
+      .optional(),
   }),
 });
 

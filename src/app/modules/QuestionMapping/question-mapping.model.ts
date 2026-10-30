@@ -63,7 +63,7 @@ const questionMappingSchema = new Schema<IQuestionMappingDoc>(
       type: Number,
       default: 0,
     },
-    
+
     author: {
       type: Schema.Types.ObjectId,
       ref: "User",
