@@ -76,10 +76,9 @@ const getAllPastExamSchema = z.object({
     trackStatus: optionalEnumString(trackStatusValues, "Track status"),
     fromDate: optionalDate("From date"),
     toDate: optionalDate("To date"),
-    projection: optionalEnumString(
-      pastExamProjectTypes,
-      "Projection",
-    ).default("details"),
+    projection: optionalEnumString(pastExamProjectTypes, "Projection").default(
+      "details",
+    ),
   }),
 });
 

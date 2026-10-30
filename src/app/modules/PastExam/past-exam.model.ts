@@ -51,6 +51,11 @@ const pastExamSchema = new Schema<IPastExamDoc>(
       required: true,
       default: 0,
     },
+    mappedQuestions: {
+      type: Number,
+      required: true,
+      default: 0,
+    },
     status: {
       type: String,
       enum: EXAM_STATUS_VALUES,

@@ -9,6 +9,7 @@ export interface IPastExam {
   slug: string;
   year: string;
   totalQuestions: number;
+  mappedQuestions: number;
   description?: string | null;
   status: TExamStatusType;
   publishedAt?: Date | null;
