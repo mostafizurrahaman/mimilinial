@@ -7,6 +7,9 @@ import { trackRoutes } from "../modules/Track";
 import { subjectRoutes } from "../modules/Subject";
 import { topicRoutes } from "../modules/Topic";
 import { passageRoutes } from "../modules/Passage";
+import { questionsRoutes } from "../modules/Questions";
+import { mediaRoutes } from "../modules/Media";
+import { pastExamRoutes } from "../modules/PastExam";
 
 const router: Router = express();
 
@@ -42,6 +45,18 @@ const routes = [
   {
     path: "/passage",
     route: passageRoutes,
+  },
+  {
+    path: "/questions",
+    route: questionsRoutes,
+  },
+  {
+    path: "/media",
+    route: mediaRoutes,
+  },
+  {
+    path: "/past-exam",
+    route: pastExamRoutes,
   },
 ];
 

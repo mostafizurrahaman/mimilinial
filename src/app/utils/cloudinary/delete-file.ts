@@ -7,12 +7,22 @@ cloudinary.config({
   api_secret: configs?.cloudinary?.cloudinaryApiSecret,
 });
 
-export const deleteFileByUrl = async (url: string) => {
-  const parts = url.split("/upload/")[1];
+
+export const getPublicId = (url: string) => { 
+   const parts = url.split("/upload/")[1];
 
   const publicId = parts
     ?.replace(/^v\d+\//, "")
     .replace(/\.[^/.]+$/, "") as string;
+
+    return publicId
+}
+
+
+
+export const deleteFileByUrl = async (url: string) => {
+  
+  const publicId = getPublicId(url)
 
   return cloudinary.uploader.destroy(publicId, {
     invalidate: true,

@@ -249,9 +249,11 @@ const updateCategory = async (
 
 // 3. GET ALL CATEGORY
 const getAllCategory = async (query: TGetAllCategoryQueryParamsType) => {
-  const { collectionId, status, collectionStatus, projection } = query;
+  const { collectionIds, status, collectionStatus, projection } = query;
   const { page, limit, skip, searchTerm, sortOrder, sortBy, fromDate, toDate } =
     formatQuery(query, categorySortableFields);
+
+  console.log({ collectionIds });
 
   const pipeline: PipelineStage[] = [];
 
@@ -267,8 +269,14 @@ const getAllCategory = async (query: TGetAllCategoryQueryParamsType) => {
     $match: {},
   };
 
-  if (collectionId) {
-    conditions.$match["collectionId"] = new Types.ObjectId(collectionId);
+  if (
+    collectionIds &&
+    Array.isArray(collectionIds) &&
+    collectionIds?.length > 0
+  ) {
+    conditions.$match["collectionId"] = {
+      $in: collectionIds,
+    };
   }
 
   pipeline.push(

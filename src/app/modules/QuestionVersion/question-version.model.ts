@@ -1,21 +1,24 @@
 import { Schema, model } from "mongoose";
+import {
+  QUESTION_TYPE,
+  QUESTION_TYPE_VALUES,
+  QUESTION_VERSION_LANGUAGE,
+  QuestionVersionLanguageValues,
+} from "../Questions/questions.constants";
+
+import { questionUtils } from "../Questions/question-utils";
 import type {
+  IFillBlankVersion,
   IMatchingPair,
   IMatchingVersion,
   IMultiMcqVersion,
   IOrderingItem,
+  IOrderingVersion,
   IQuestionOption,
   IQuestionVersionDoc,
   ISingleMcqVersion,
   ITrueFalseVersion,
-} from "./question-version.interfaces";
-import z from "zod";
-import { QUESTION_TYPE, QUESTION_TYPE_VALUES } from "../Questions";
-import {
-  QUESTION_VERSION_LANGUAGE,
-  QuestionVersionLanguageValues,
-} from "./question-version.constants";
-import { questionUtils } from "./question-utils";
+} from "../Questions";
 
 /**
  * -------------------------
@@ -126,6 +129,23 @@ const questionVersionSchema = new Schema<IQuestionVersionDoc>(
       required: true,
       trim: true,
     },
+    plainStem: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    explanation: {
+      type: String,
+      allowNull: true,
+      default: null,
+    },
+
+    contentHash: {
+      type: String,
+      required: true,
+      index: true,
+      trim: true,
+    },
     language: {
       type: String,
       required: true,
@@ -155,6 +175,22 @@ const questionVersionSchema = new Schema<IQuestionVersionDoc>(
     versionKey: false,
   },
 );
+
+/**
+ * Pre-validate hook: Automatically compute contentHash if missing or modified
+ */
+questionVersionSchema.pre("validate", function () {
+  if (
+    !this.contentHash ||
+    this.isModified("stem") ||
+    this.isModified("options") ||
+    this.isModified("acceptedAnswers") ||
+    this.isModified("pairs") ||
+    this.isModified("orderingItems")
+  ) {
+    this.contentHash = questionUtils.generateContentHash(this as any);
+  }
+});
 
 /**
  *  DISCRIMINATOR Schemas
@@ -190,7 +226,35 @@ const trueFalseVersionSchema = new Schema<ITrueFalseVersion>({
 
 // 4. Matching Pair:
 const matchingPairVersionSchema = new Schema<IMatchingVersion>({
+  pairs: {
+    type: [matchingPairSchema],
+    required: true,
+    min: 2,
+  },
+});
 
+// 5. Fill Blank
+const fillBlankVersionSchema = new Schema<IFillBlankVersion>({
+  acceptedAnswers: {
+    type: [String],
+    required: true,
+    trim: true,
+    min: 1,
+  },
+  isCaseSensitive: {
+    type: Boolean,
+    required: true,
+    default: false,
+  },
+});
+
+// 6. Order Item:
+const OrderingItemVersionSchema = new Schema<IOrderingVersion>({
+  orderingItems: {
+    type: [orderingItemSchema],
+    required: true,
+    min: 2,
+  },
 });
 
 /**
@@ -198,10 +262,10 @@ const matchingPairVersionSchema = new Schema<IMatchingVersion>({
  */
 
 // Duplicate version index with uniqueness:
-questionOptionSchema.index(
+questionVersionSchema.index(
   {
     question: 1,
-    version: 1,
+    versionNumber: 1,
   },
   {
     unique: true,
@@ -210,13 +274,24 @@ questionOptionSchema.index(
 );
 
 // Ensure one question will have one current version only:
-questionOptionSchema.index(
+questionVersionSchema.index(
   {
     question: 1,
   },
   {
+    name: "question_current_version_index",
     unique: true,
     partialFilterExpression: { isCurrent: true },
+  },
+);
+
+// Content hash index for instant O(1) duplicate lookup:
+questionVersionSchema.index(
+  {
+    contentHash: 1,
+  },
+  {
+    name: "contentHash_lookup",
   },
 );
 
@@ -227,19 +302,43 @@ export const QuestionVersion = model<IQuestionVersionDoc>(
 );
 
 // Single Question Discriminator  Model:
-export const SingleMcqVersion = QuestionVersion.discriminator(
-  QUESTION_TYPE.SINGLE_MCQ,
-  singleMcqVersionSchema,
-);
+export const SingleMcqVersion =
+  QuestionVersion.discriminator<ISingleMcqVersion>(
+    QUESTION_TYPE.SINGLE_MCQ,
+    singleMcqVersionSchema,
+  );
 
 // Multiple Choice Question Discriminator  Model:
-export const MultipleChoiceMcqVersion = QuestionVersion.discriminator(
-  QUESTION_TYPE.SINGLE_MCQ,
-  multipleChoiceVersionSchema,
-);
+export const MultipleChoiceMcqVersion =
+  QuestionVersion.discriminator<IMultiMcqVersion>(
+    QUESTION_TYPE.MULTI_MCQ,
+    multipleChoiceVersionSchema,
+  );
 
-// True / False Question Version Schema:
-export const TrueFalseMcqVersion = QuestionVersion.discriminator(
-  QUESTION_TYPE.TRUE_FALSE,
-  trueFalseVersionSchema,
-);
+// True / False Question Version Model:
+export const TrueFalseMcqVersion =
+  QuestionVersion.discriminator<ITrueFalseVersion>(
+    QUESTION_TYPE.TRUE_FALSE,
+    trueFalseVersionSchema,
+  );
+
+// Matching Pair Question Version Model:
+export const MatchingPairQuestionVersion =
+  QuestionVersion.discriminator<IMatchingVersion>(
+    QUESTION_TYPE.MATCHING,
+    matchingPairVersionSchema,
+  );
+
+// Fill in the blank:
+export const FillBlankQuestionVersion =
+  QuestionVersion.discriminator<IFillBlankVersion>(
+    QUESTION_TYPE.FILL_BLANK,
+    fillBlankVersionSchema,
+  );
+
+// 6. Ordering Question Version Model:
+export const OrderingQuestionVersion =
+  QuestionVersion.discriminator<IOrderingVersion>(
+    QUESTION_TYPE.ORDERING,
+    OrderingItemVersionSchema,
+  );

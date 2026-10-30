@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 
 export const connectDB = async (uri: string) => {
    try {
+      mongoose.set("updatePipeline", true);
       await mongoose.connect(uri);
       console.info("✅ Database connected  successfully!");
    } catch (err: unknown) {

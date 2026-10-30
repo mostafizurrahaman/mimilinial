@@ -271,7 +271,8 @@ const getAllSubject = async (query: TGetAllSubjectQueryParamsType) => {
     });
   }
 
-  const fields = subjectProjections[projection as "list" | "details"];
+  const fields =
+    subjectProjections[(projection as "list" | "details") || "details"];
 
   pipeline.push({
     $project: fields,

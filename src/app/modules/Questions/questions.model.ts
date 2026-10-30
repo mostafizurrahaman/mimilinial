@@ -23,7 +23,6 @@ const questionsSchema = new Schema<IQuestionDoc>(
     slug: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
       index: true,
       lowercase: true,
@@ -47,10 +46,10 @@ const questionsSchema = new Schema<IQuestionDoc>(
       index: true,
       default: QUESTION_STATUS.DRAFT,
     },
+
     passageId: {
       type: Schema.Types.ObjectId,
       ref: "Passage",
-      required: true,
       index: true,
       allowNull: true,
       default: null,
@@ -64,6 +63,14 @@ const questionsSchema = new Schema<IQuestionDoc>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
+    },
+    publishedAt: {
+      type: Date,
+      allowNull: true,
+    },
+    archivedAt: {
+      type: Date,
+      allowNull: true,
     },
   },
   {
@@ -88,4 +95,4 @@ questionsSchema.index({
 // 2. Status and flag handle:
 questionsSchema.index({ status: 1, isFlagged: 1 });
 
-export const Questions = model<IQuestionDoc>("Questions", questionsSchema);
+export const Question = model<IQuestionDoc>("Question", questionsSchema);

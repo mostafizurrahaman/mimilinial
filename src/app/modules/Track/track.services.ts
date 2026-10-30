@@ -178,17 +178,20 @@ const updateTrack = async (id: string, payload: TUpdateTrackPayloadType) => {
 
 // 3. GET ALL TRACK
 const getAllTrack = async (query: TGetAllTrackQueryParamsType) => {
-  const { category, status, categoryStatus, collectionStatus, projection } =
+  const { categoryIds, status, categoryStatus, collectionStatus, projection } =
     query;
   const { page, limit, skip, searchTerm, sortOrder, sortBy, fromDate, toDate } =
     formatQuery(query, trackSortableFields);
 
+  console.log({ categoryIds });
   const pipeline: PipelineStage[] = [];
 
-  if (category) {
+  if (categoryIds && Array.isArray(categoryIds) && categoryIds?.length > 0) {
     pipeline.push({
       $match: {
-        category: new Types.ObjectId(category),
+        category: {
+          $in: categoryIds,
+        },
       },
     });
   }

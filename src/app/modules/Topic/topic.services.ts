@@ -221,8 +221,8 @@ const updateTopic = async (id: string, payload: TUpdateTopicPayloadType) => {
 const getAllTopic = async (query: TGetAllTopicQueryParamsType) => {
   const {
     status,
-    subjectId,
-    parentTopicId,
+    subjectIds,
+    parentTopicIds,
     projection,
     parentTopicStatus,
     subjectStatus,
@@ -236,11 +236,23 @@ const getAllTopic = async (query: TGetAllTopicQueryParamsType) => {
   if (status !== undefined) {
     matchStage.$match["status"] = status;
   }
-  if (subjectId !== undefined) {
-    matchStage.$match["subject"] = new Types.ObjectId(subjectId);
+  if (
+    subjectIds !== undefined &&
+    Array.isArray(subjectIds) &&
+    subjectIds?.length > 0
+  ) {
+    matchStage.$match["subject"] = {
+      $in: subjectIds,
+    };
   }
-  if (parentTopicId !== undefined) {
-    matchStage.$match["parentTopic"] = new Types.ObjectId(parentTopicId);
+  if (
+    parentTopicIds !== undefined &&
+    Array.isArray(subjectIds) &&
+    subjectIds?.length > 0
+  ) {
+    matchStage.$match["parentTopic"] = {
+      $in: parentTopicIds,
+    };
   }
 
   pipeline.push(matchStage);

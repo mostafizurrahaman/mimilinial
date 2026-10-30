@@ -8,6 +8,7 @@ import {
   requiredMongooseId,
   requiredNumber,
   enumString,
+  multipleMongooseId,
 } from "../../utils";
 import {
   TOPIC_STATUS_VALUES,
@@ -67,8 +68,8 @@ const getAllTopicSchema = z.object({
     page: optionalNumber("Page"),
     limit: optionalNumber("Limit"),
     slug: optionalString("Slug").nullish(),
-    subjectId: requiredMongooseId("Subject ID").optional(),
-    parentTopicId: requiredMongooseId("Parent Topic ID").optional(),
+    subjectIds: multipleMongooseId("Subject IDs").optional(),
+    parentTopicIds: multipleMongooseId("Parent Topic IDs").optional(),
     searchTerm: optionalString("Search term"),
     sortOrder: optionalEnumString(sortOrderValues, "Sort order"),
     sortBy: optionalEnumString(topicSortableFields, "Sort by"),

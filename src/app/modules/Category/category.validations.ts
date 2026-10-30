@@ -6,6 +6,7 @@ import {
   optionalString,
   optionalDate,
   requiredMongooseId,
+  multipleMongooseId,
 } from "../../utils";
 import {
   categoryProjectionValues,
@@ -47,7 +48,7 @@ const getAllCategorySchema = z.object({
   query: z.object({
     page: optionalNumber("Page"),
     limit: optionalNumber("Limit"),
-    collectionId: requiredMongooseId("Collection ID").optional(),
+    collectionIds: multipleMongooseId("Collection ID").optional(),
     status: optionalEnumString(categoryStatusValues, "Status"),
     collectionStatus: optionalEnumString(
       COLLECTION_STATUS_VALUES,

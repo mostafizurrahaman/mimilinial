@@ -1,7 +1,10 @@
 import express, { Router } from "express";
 import { questionsControllers } from "./questions.controllers";
-import { questionsValidations } from "./questions.validations";
 import { validateRequest } from "../../middlewares";
+
+import { auth } from "@/app/middlewares/auth";
+import { UserRoles } from "../User";
+import { questionValidations } from "./questions.validations";
 
 const router: Router = express.Router();
 
@@ -11,39 +14,146 @@ const router: Router = express.Router();
  * -------------------------------------------------------------------------
  */
 
-// 1. CREATE QUESTIONS
+// 1. CREATE SINGLE MCQ QUESTIONS
 router.post(
-   "/",
-   validateRequest(questionsValidations.createQuestionsSchema),
-   questionsControllers.createQuestions,
+  "/single-mcq",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.createSingleMcqQuestionSchema),
+  questionsControllers.createSingleMcqQuestion,
 );
 
-// 2. UPDATE QUESTIONS
+// 2. CREATE MULTI MCQ QUESTIONS
+router.post(
+  "/multi-mcq",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.createMultiMcqOptionSchema),
+  questionsControllers.createMultiMcqQuestion,
+);
+
+// 3. CREATE TRUE FALSE QUESTIONS
+router.post(
+  "/true-false",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.createTrueFalseQuestionSchema),
+  questionsControllers.createTrueFalseQuestion,
+);
+
+// 4. CREATE FILL IN THE BLANK QUESTIONS
+router.post(
+  "/fill-blank",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.createFillBlankQuestionSchema),
+  questionsControllers.createFillBlankQuestion,
+);
+
+// 5. CREATE MATCHING QUESTIONS
+router.post(
+  "/matching",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.createMatchingQuestionSchema),
+  questionsControllers.createMatchingQuestion,
+);
+
+// 6. CREATE ORDERING QUESTIONS
+router.post(
+  "/ordering",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.createOrderingQuestionSchema),
+  questionsControllers.createOrderingQuestion,
+);
+
+// 7. UPDATE SINGLE MCQ QUESTIONS
 router.patch(
-   "/:id",
-   validateRequest(questionsValidations.updateQuestionsSchema),
-   questionsControllers.updateQuestions,
+  "/single-mcq/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.updateSingleMcqQuestionSchema),
+  questionsControllers.updateSingleMcqQuestion,
 );
 
-// 3. GET ALL QUESTIONS
+// 8. UPDATE MULTI MCQ QUESTIONS
+router.patch(
+  "/multi-mcq/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.updateMultiMcqQuestionSchema),
+  questionsControllers.updateMultiMcqQuestion,
+);
+
+// 9. UPDATE TRUE FALSE QUESTIONS
+router.patch(
+  "/true-false/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.updateTrueFalseQuestionSchema),
+  questionsControllers.updateTrueFalseQuestion,
+);
+
+// 10. UPDATE FILL IN THE BLANK QUESTIONS
+router.patch(
+  "/fill-blank/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.updateFillBlankQuestionSchema),
+  questionsControllers.updateFillBlankQuestion,
+);
+
+// 11. UPDATE MATCHING QUESTIONS
+router.patch(
+  "/matching/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.updateMatchingQuestionSchema),
+  questionsControllers.updateMatchingQuestion,
+);
+
+// 12. UPDATE ORDERING QUESTIONS
+router.patch(
+  "/ordering/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.updateOrderingQuestionSchema),
+  questionsControllers.updateOrderingQuestion,
+);
+
+// GET ALL QUESTIONS
 router.get(
-   "/all",
-   validateRequest(questionsValidations.getAllQuestionsSchema),
-   questionsControllers.getAllQuestions,
+  "/all",
+  auth(),
+  validateRequest(questionValidations.getAllQuestionsSchema),
+  questionsControllers.getAllQuestions,
 );
 
-// 4. GET QUESTIONS BY ID
+// GET ALL QUESTIONS
 router.get(
-   "/:id",
-   validateRequest(questionsValidations.getQuestionsByIdSchema),
-   questionsControllers.getQuestionsById,
+  "/published",
+  auth(),
+  validateRequest(questionValidations.getAllPublishedQuestionsSchema),
+  questionsControllers.getAllPublishedQuestions,
 );
 
-// 5. DELETE QUESTIONS BY ID
-router.delete(
-   "/:id",
-   validateRequest(questionsValidations.deleteQuestionsByIdSchema),
-   questionsControllers.deleteQuestionsById,
+// // GET QUESTIONS BY ID
+router.get(
+  "/:id",
+  validateRequest(questionValidations.getQuestionByIDSchema),
+  questionsControllers.getQuestionByID,
 );
+
+// // Mark question as published:
+router.patch(
+  "/:id/published",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.markQuestionAsPublishedByIdSchema),
+  questionsControllers.markAsPublished,
+);
+
+// // Mark question as archived:
+router.patch(
+  "/:id/archived",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(questionValidations.markQuestionAsArchivedByIdSchema),
+  questionsControllers.markAsArchived,
+);
+
+// // DELETE QUESTIONS BY ID
+// router.delete(
+//   "/:id",
+//   validateRequest(questionsValidations.deleteQuestionsByIdSchema),
+//   questionsControllers.deleteQuestionsById,
+// );
 
 export const questionsRoutes = router;
