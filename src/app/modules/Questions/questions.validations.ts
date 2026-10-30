@@ -1,5 +1,6 @@
 import {
   enumString,
+  multipleMongooseId,
   optionalDate,
   optionalEnumString,
   optionalString,
@@ -783,9 +784,9 @@ const getAllQuestionsSchema = z.object({
     type: optionalEnumString(QUESTION_TYPE_VALUES, "Question type"),
     difficulty: optionalEnumString(QUESTION_DIFFICULTY_VALUES, "Difficulty"),
     status: optionalEnumString(QUESTION_STATUS_VALUES, "Status"),
-    passageId: requiredMongooseId("Passage ID").optional(),
+    passageIds: multipleMongooseId("Passage ID").optional(),
     isFlagged: requiredStrBoolean("Is Flagged").optional(),
-    author: requiredMongooseId("Author").optional(),
+    authors: multipleMongooseId("Author").optional(),
 
     // search term:
     searchTerm: optionalString("Search term"),
@@ -804,27 +805,8 @@ const getAllQuestionsSchema = z.object({
 
 // Get all the questions from db:
 const getAllPublishedQuestionsSchema = z.object({
-  query: z.object({
-    code: optionalString("Code"),
-    slug: optionalString("Slug"),
-    type: optionalEnumString(QUESTION_TYPE_VALUES, "Question type"),
-    difficulty: optionalEnumString(QUESTION_DIFFICULTY_VALUES, "Difficulty"),
-    passageId: requiredMongooseId("Passage ID").optional(),
-    isFlagged: requiredStrBoolean("Is Flagged").optional(),
-    author: requiredMongooseId("Author").optional(),
-
-    // search term:
-    searchTerm: optionalString("Search term"),
-    sortBy: optionalEnumString(questionsSortableFields, "Sort By"),
-    sortOrder: optionalEnumString(sortOrderValues, "Sort Order"),
-    fromDate: optionalDate("From date"),
-    toDate: optionalDate("To date"),
-
-    // Projection:
-    projection: optionalEnumString(
-      questionProjectionValues,
-      "Projection Type",
-    ).default("list"),
+  query: getAllQuestionsSchema.shape.query.omit({
+    status: true,
   }),
 });
 

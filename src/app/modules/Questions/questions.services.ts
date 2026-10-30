@@ -2537,8 +2537,8 @@ const getAllQuestionsFromDB = async (query: TGetAllQuestionQueryType) => {
     code,
     difficulty,
     slug,
-    author,
-    passageId,
+    authors,
+    passageIds,
     status,
     isFlagged,
     type,
@@ -2566,13 +2566,17 @@ const getAllQuestionsFromDB = async (query: TGetAllQuestionQueryType) => {
   }
 
   // Filter by difficulty:
-  if (author) {
-    matchingStage.$match["author"] = new Types.ObjectId(author);
+  if (authors !== undefined && Array.isArray(authors) && authors?.length > 0) {
+    matchingStage.$match["author"] = {
+      $in: authors,
+    };
   }
 
   // Filter by difficulty:
-  if (passageId) {
-    matchingStage.$match["passageId"] = new Types.ObjectId(passageId);
+  if (passageIds) {
+    matchingStage.$match["passageId"] = {
+      $in: passageIds,
+    };
   }
 
   // Filter by status
@@ -2735,6 +2739,7 @@ const getAllPublishedQuestionsFromDB = async (
   return await getAllQuestionsFromDB({
     ...query,
     status: QUESTION_STATUS.PUBLISHED,
+    isFlagged: true,
   });
 };
 

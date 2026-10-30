@@ -5,7 +5,7 @@ import type {
   TGetAllPastExamQueryParamsType,
   TGetAllPublishedPastExamQueryParamsType,
 } from "./past-exam.validations";
-import { BadRequest, ConflictError, NotFoundError } from "../../errors";
+import { AppError, BadRequest, ConflictError, NotFoundError } from "../../errors";
 import { PastExam } from "./past-exam.model";
 import {
   EXAM_STATUS,
@@ -18,6 +18,7 @@ import type { IUserDoc } from "../User";
 import { Category, categoryStatus } from "../Category";
 import { Track, trackStatus } from "../Track";
 import { createSlug, generateSlug, formatQuery } from "@/app/utils";
+import { PASSAGE_STATUS } from "../Passage";
 
 // 1. CREATE PAST EXAM
 const createPastExam = async (
@@ -194,8 +195,8 @@ const updatePastExam = async (
 // 3. GET ALL PAST EXAM
 const getAllPastExam = async (query: TGetAllPastExamQueryParamsType) => {
   const {
-    category,
-    track,
+    categoryIds,
+    trackIds,
     year,
     status,
     categoryStatus,
@@ -209,8 +210,17 @@ const getAllPastExam = async (query: TGetAllPastExamQueryParamsType) => {
   const pipeline: PipelineStage[] = [];
 
   const preMatch: Record<string, unknown> = {};
-  if (category) preMatch.category = new Types.ObjectId(category);
-  if (track) preMatch.track = new Types.ObjectId(track);
+  if (categoryIds && Array.isArray(categoryIds) && categoryIds?.length> 0) {
+    preMatch.category = {
+        $in: categoryIds
+  }
+}
+  if (trackIds && Array.isArray(trackIds) && trackIds?.length > 0) {
+
+    preMatch.track = {
+      $in: trackIds
+    }
+  } 
   if (year) preMatch.year = year;
   if (Object.keys(preMatch).length > 0) {
     pipeline.push({ $match: preMatch });
@@ -512,6 +522,10 @@ const deletePastExamById = async (id: string) => {
     throw new NotFoundError("Past exam not found.");
   }
 
+  if (result.status === EXAM_STATUS.PUBLISHED) { 
+    throw new BadRequest("You can not delete an published exam.")
+  }
+
   return result;
 };
 
@@ -578,6 +592,8 @@ const markAsArchived = async (id: string) => {
   if (pastExam.status === EXAM_STATUS.ARCHIVED) {
     throw new BadRequest("This past exam has already been archived.");
   }
+
+  // TODO: Archived past exams completed.............
 
   pastExam.status = EXAM_STATUS.ARCHIVED;
   pastExam.archivedAt = new Date();

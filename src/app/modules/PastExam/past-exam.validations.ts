@@ -6,6 +6,7 @@ import {
   optionalString,
   optionalDate,
   requiredMongooseId,
+  multipleMongooseId,
 } from "../../utils";
 import {
   EXAM_STATUS_VALUES,
@@ -67,8 +68,8 @@ const getAllPastExamSchema = z.object({
     searchTerm: optionalString("Search term"),
     sortOrder: optionalEnumString(sortOrderValues, "Sort order"),
     sortBy: optionalEnumString(pastExamSortableFields, "Sort by"),
-    category: requiredMongooseId("Category ID").optional(),
-    track: requiredMongooseId("Track ID").optional(),
+    categoryIds: multipleMongooseId("Category ID").optional(),
+    trackIds: multipleMongooseId("Track ID").optional(),
     year: optionalString("Year"),
     status: optionalEnumString(EXAM_STATUS_VALUES, "Exam status"),
     categoryStatus: optionalEnumString(categoryStatusValues, "Category status"),

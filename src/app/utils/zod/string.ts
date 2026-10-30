@@ -1,6 +1,6 @@
 import { z, ZodIssueCode } from "zod";
 
-import mongoose from "mongoose";
+import mongoose, { Types } from "mongoose";
 import { URL_REGEX } from "@/app/constants/regex";
 
 /**
@@ -162,4 +162,37 @@ export const requiredMongooseId = (fieldName = "Field") => {
         error: () => "Invalid ID!",
       },
     );
+};
+
+export const multipleMongooseId = (fieldName = "Field") => {
+  return z
+    .union(
+      [
+        z.array(requiredMongooseId(fieldName)),
+        z
+          .string({ error: "Mongoose Id is required." })
+          .transform((val) => val?.split(","))
+          .refine((val) => {
+            if (Array.isArray(val) && val?.length > 0) {
+              const filteredObjIds = val?.some(
+                (id) => !mongoose.isValidObjectId(id),
+              );
+
+              return !filteredObjIds;
+            }
+          }, `One or more ${fieldName} are invalid.`),
+      ],
+      {
+        error: `${fieldName} is required.`,
+      },
+    )
+    .transform((val) => {
+      const ids = new Set();
+      const values = Array.isArray(val) ? val : [val];
+      values?.map((id) => ids.add(id));
+      const objIds = Array.from(ids)?.map(
+        (id) => new Types.ObjectId(id as string),
+      );
+      return objIds;
+    });
 };
