@@ -12,7 +12,10 @@ import {
   NotFoundError,
 } from "../../errors";
 import { QuestionMapping } from "./question-mapping.model";
-import { questionMappingSearchableFields } from "./question-mapping.constants";
+import {
+  questionMappingSearchableFields,
+  questionMappingSortableFields,
+} from "./question-mapping.constants";
 import type { IUserDoc } from "../User";
 import { Question, QUESTION_STATUS } from "../Questions";
 import { Collection, COLLECTION_STATUS } from "../Collection";
@@ -23,6 +26,7 @@ import { Track, trackStatus } from "../Track";
 import { EXAM_STATUS, PastExam } from "../PastExam";
 import { QuestionVersion } from "../QuestionVersion";
 import mongoose from "mongoose";
+import { formatQuery } from "@/app/utils";
 
 // 1. CREATE QUESTION MAPPING
 const createQuestionMapping = async (
@@ -584,11 +588,93 @@ const updateQuestionMapping = async (
 const getAllQuestionMapping = async (
   query: TGetAllQuestionMappingQueryParamsType,
 ) => {
+  const {
+    questionIds,
+    collectionIds,
+    categoryIds,
+    trackIds,
+    subjectIds,
+    topicIds,
+    pastExamIds,
+    year,
+
+    // Question
+    type,
+    difficulty,
+  } = query;
+
   const { page, limit, skip, searchTerm, sortOrder, sortBy, fromDate, toDate } =
     formatQuery(query, questionMappingSortableFields);
 
   const pipeline: PipelineStage[] = [];
 
+  const matchStage: PipelineStage.Match = {
+    $match: {},
+  };
+
+  // Collection Filter:
+  if (
+    collectionIds &&
+    Array.isArray(collectionIds) &&
+    collectionIds?.length > 0
+  ) {
+    matchStage.$match["coll"] = {
+      $in: collectionIds,
+    };
+  }
+
+  // Category Filter:
+  if (categoryIds && Array.isArray(categoryIds) && categoryIds?.length > 0) {
+    matchStage.$match["category"] = {
+      $in: categoryIds,
+    };
+  }
+
+  // track Filter:
+  if (trackIds && Array.isArray(trackIds) && trackIds?.length > 0) {
+    matchStage.$match["track"] = {
+      $in: trackIds,
+    };
+  }
+
+  // Subject Filter:
+  if (subjectIds && Array.isArray(subjectIds) && subjectIds?.length > 0) {
+    matchStage.$match["subject"] = {
+      $in: subjectIds,
+    };
+  }
+
+  // Topic Filter:
+  if (topicIds && Array.isArray(topicIds) && topicIds?.length > 0) {
+    matchStage.$match["topic"] = {
+      $in: topicIds,
+    };
+  }
+
+  // Topic Filter:
+  if (pastExamIds && Array.isArray(pastExamIds) && pastExamIds?.length > 0) {
+    matchStage.$match["pastExam"] = {
+      $in: pastExamIds,
+    };
+  }
+
+  // Year Filter:
+  if (year !== undefined) {
+    matchStage.$match["year"] = year;
+  }
+
+  // Year Filter:
+  if (questionIds && Array.isArray(questionIds) && questionIds?.length > 0) {
+    matchStage.$match["question"] = {
+      $in: questionIds,
+    };
+  }
+
+  if (Object.values(matchStage?.$match)?.length > 0) {
+    pipeline.push(matchStage);
+  }
+
+  // Date Filter:
   if (fromDate || toDate) {
     const dateFilter: Record<string, unknown> = {};
     if (fromDate) dateFilter.$gte = new Date(fromDate);
@@ -596,6 +682,59 @@ const getAllQuestionMapping = async (
 
     pipeline.push({ $match: { createdAt: dateFilter } });
   }
+
+  // Question Lookup:
+  pipeline.push(
+    {
+      $lookup: {
+        from: "questions",
+        localField: "question",
+        foreignField: "_id",
+        as: "questionDetails",
+      },
+    },
+    {
+      $unwind: {
+        path: "$questionDetails",
+        preserveNullAndEmptyArrays: false,
+      },
+    },
+  );
+
+  // Question Classification filters:
+  const questionClassificationMatchingStage: PipelineStage.Match = {
+    $match: {},
+  };
+
+  if (type && Array.isArray(type) && type?.length > 0) {
+    questionClassificationMatchingStage.$match["questionDetails.type"] = {
+      $in: type,
+    };
+  }
+
+  if (difficulty && Array.isArray(difficulty) && difficulty?.length > 0) {
+    questionClassificationMatchingStage.$match["questionDetails.difficulty"] = {
+      $in: difficulty,
+    };
+  }
+
+  // Lookup version:
+  pipeline.push(
+    {
+      $lookup: {
+        from: "questions",
+        localField: "question",
+        foreignField: "_id",
+        as: "questionDetails",
+      },
+    },
+    {
+      $unwind: {
+        path: "$questionDetails",
+        preserveNullAndEmptyArrays: false,
+      },
+    },
+  );
 
   if (searchTerm) {
     pipeline.push({

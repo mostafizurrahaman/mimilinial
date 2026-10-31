@@ -8,9 +8,11 @@ import {
   requiredMongooseId,
   requiredNumber,
   multipleMongooseId,
+  requiredStrBoolean,
 } from "../../utils";
 import { questionMappingSortableFields } from "./question-mapping.constants";
 import { sortOrderValues } from "../../constants";
+import { QUESTION_DIFFICULTY_VALUES, QUESTION_TYPE_VALUES } from "../Questions";
 
 // 1. CREATE QUESTION MAPPING
 const createQuestionMappingSchema = z.object({
@@ -75,19 +77,35 @@ const getAllQuestionMappingSchema = z.object({
     toDate: optionalDate("To date"),
 
     // Question IDS:
-    question: multipleMongooseId("Question ID").optional(),
-    coll: multipleMongooseId("Collection ID").optional(),
-    category: multipleMongooseId("Category ID").optional(),
-    track: multipleMongooseId("Track ID").optional(),
-    subject: multipleMongooseId("Subject ID").optional(),
-    topic: multipleMongooseId("Topic ID").optional(),
-    pastExam: multipleMongooseId("Past Exam").optional(),
+    questionIds: multipleMongooseId("Question ID").optional(),
+    collectionIds: multipleMongooseId("Collection ID").optional(),
+    categoryIds: multipleMongooseId("Category ID").optional(),
+    trackIds: multipleMongooseId("Track ID").optional(),
+    subjectIds: multipleMongooseId("Subject ID").optional(),
+    topicIds: multipleMongooseId("Topic ID").optional(),
+    pastExamIds: multipleMongooseId("Past Exam").optional(),
     year: requiredString("Year")
       .regex(
         /^(19[7-9]\d|20\d{2}|2100)$/,
         "Provide a valid year between 1971 and 2100.",
       )
       .optional(),
+
+    // Question Filters:
+    type: z
+      .array(optionalEnumString(QUESTION_TYPE_VALUES, "Question type"), {
+        error: "Type must be list of question type.",
+      })
+      .optional(),
+    difficulty: z.array(
+      optionalEnumString(QUESTION_DIFFICULTY_VALUES, "Difficulty"),
+      {
+        error: "Difficulty must be list of difficulty type.",
+      },
+    ),
+    includeInActiveQuestion: requiredStrBoolean("Include inactive question")
+      .optional()
+      .default(false),
   }),
 });
 
