@@ -129,7 +129,8 @@ const createQuestionMapping = async (
     }
 
     if (
-      existingTrack.category?.toString() !== existingCategory?._id?.toString()
+      existingTrack.category?.toString() !==
+      existingCategory?._id?.toString()
     ) {
       throw new BadRequest(
         `The selected track does not belong to the selected category.`,
@@ -324,8 +325,73 @@ const updateQuestionMapping = async (
     throw new NotFoundError("Question mapping not found.");
   }
 
+  // 1.1 Disallow changing the question of an existing mapping
+  if (
+    payload.question &&
+    payload.question.toString() !== existingMapping.question.toString()
+  ) {
+    throw new BadRequest(
+      "Changing the question of an existing mapping is not allowed. Please create a new mapping instead.",
+    );
+  }
+
+  // 1.2 Check if any hierarchy/classification field is changed
+  const isHierarchyChanged =
+    (payload.coll !== undefined &&
+      payload.coll.toString() !== existingMapping.coll.toString()) ||
+    (payload.category !== undefined &&
+      payload.category.toString() !== existingMapping.category.toString()) ||
+    (payload.track !== undefined &&
+      (payload.track?.toString() ?? null) !==
+      (existingMapping.track?.toString() ?? null)) ||
+    (payload.subject !== undefined &&
+      payload.subject.toString() !== existingMapping.subject.toString()) ||
+    (payload.topic !== undefined &&
+      payload.topic.toString() !== existingMapping.topic.toString()) ||
+    (payload.pastExam !== undefined &&
+      (payload.pastExam?.toString() ?? null) !==
+      (existingMapping.pastExam?.toString() ?? null));
+
+  // If hierarchy did NOT change, only update non-hierarchy fields (marks, sortOrder, year)
+  if (!isHierarchyChanged) {
+    let hasFieldChanged = false;
+
+    if (
+      payload.marks !== undefined &&
+      payload.marks !== existingMapping.marks
+    ) {
+      existingMapping.marks = payload.marks;
+      hasFieldChanged = true;
+    }
+
+    if (
+      payload.sortOrder !== undefined &&
+      payload.sortOrder !== existingMapping.sortOrder
+    ) {
+      existingMapping.sortOrder = payload.sortOrder;
+      hasFieldChanged = true;
+    }
+
+    if (payload.year !== undefined && payload.year !== existingMapping.year) {
+      if (existingMapping.pastExam) {
+        throw new BadRequest(
+          "Year cannot be manually changed when a past exam is mapped. It is determined by the past exam.",
+        );
+      }
+      existingMapping.year = payload.year;
+      hasFieldChanged = true;
+    }
+
+    if (hasFieldChanged) {
+      existingMapping.author = user._id;
+      await existingMapping.save();
+    }
+
+    return existingMapping;
+  }
+
   // 2.  (Effective / Target)
-  const targetQuestionId = payload.question ?? existingMapping.question;
+  const targetQuestionId = existingMapping.question;
   const targetCollectionId = payload.coll ?? existingMapping.coll;
   const targetCategoryId = payload.category ?? existingMapping.category;
   const targetTrackId =
@@ -415,7 +481,8 @@ const updateQuestionMapping = async (
       );
     }
     if (
-      effectiveTrack.category?.toString() !== effectiveCategory._id.toString()
+      effectiveTrack.category?.toString() !==
+      effectiveCategory._id.toString()
     ) {
       throw new BadRequest(
         "The selected track does not belong to the selected category.",
@@ -596,15 +663,26 @@ const getAllQuestionMapping = async (
     subjectIds,
     topicIds,
     pastExamIds,
-    year,
+    years,
 
     // Question
     type,
     difficulty,
+
+    // includeInActiveQuestion
+    includeInActiveQuestion,
   } = query;
 
-  const { page, limit, skip, searchTerm, sortOrder, sortBy, fromDate, toDate } =
-    formatQuery(query, questionMappingSortableFields);
+  const {
+    page,
+    limit,
+    skip,
+    searchTerm,
+    sortOrder,
+    sortBy,
+    fromDate,
+    toDate,
+  } = formatQuery(query, questionMappingSortableFields);
 
   const pipeline: PipelineStage[] = [];
 
@@ -659,11 +737,13 @@ const getAllQuestionMapping = async (
   }
 
   // Year Filter:
-  if (year !== undefined) {
-    matchStage.$match["year"] = year;
+  if (years && Array.isArray(years) && years?.length > 0) {
+    matchStage.$match["year"] = {
+      $in: years,
+    };
   }
 
-  // Year Filter:
+  // Question Ids Filter:
   if (questionIds && Array.isArray(questionIds) && questionIds?.length > 0) {
     matchStage.$match["question"] = {
       $in: questionIds,
@@ -713,7 +793,8 @@ const getAllQuestionMapping = async (
   }
 
   if (difficulty && Array.isArray(difficulty) && difficulty?.length > 0) {
-    questionClassificationMatchingStage.$match["questionDetails.difficulty"] = {
+    questionClassificationMatchingStage.$match["questionDetails.difficulty"] =
+    {
       $in: difficulty,
     };
   }
@@ -736,15 +817,329 @@ const getAllQuestionMapping = async (
     },
   );
 
+  // Question Live version lookup:
+  pipeline.push(
+    {
+      $lookup: {
+        from: "questionversions",
+        let: {
+          questionId: "$questionDetails._id",
+        },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $eq: ["$$questionId", "$question"],
+              },
+              isCurrent: true,
+            },
+          },
+        ],
+        as: "currentVersion",
+      },
+    },
+    {
+      $unwind: {
+        path: "$currentVersion",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+  );
+
+
   if (searchTerm) {
     pipeline.push({
       $match: {
-        $or: questionMappingSearchableFields.map((field) => ({
+        $or: ["questionDetails.code", "questionDetails.slug", 'currentVersion.plainStem', 'currentVersion.stem', "year"].map((field) => ({
           [field]: { $regex: searchTerm, $options: "i" },
         })),
       },
     });
   }
+
+  // Subject Lookup:
+  pipeline.push(
+    {
+      $lookup: {
+        from: "collections",
+        localField: "coll",
+        foreignField: "_id",
+        as: "collectionDetails",
+        pipeline: [
+          {
+            $project: {
+              nameEn: 1,
+              nameBn: 1,
+              slug: 1,
+              status: 1,
+            },
+          },
+        ],
+      },
+    },
+
+    {
+      $unwind: {
+        path: "$collectionDetails",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+
+    {
+      $lookup: {
+        from: "categories",
+        localField: "category",
+        foreignField: "_id",
+        as: "categoryDetails",
+        pipeline: [
+          {
+            $project: {
+              nameEn: 1,
+              nameBn: 1,
+              slug: 1,
+              status: 1,
+            },
+          },
+        ],
+      },
+    },
+
+    {
+      $unwind: {
+        path: "$categoryDetails",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+
+    {
+      $lookup: {
+        from: "tracks",
+        localField: "track",
+        foreignField: "_id",
+        as: "trackDetails",
+        pipeline: [
+          {
+            $project: {
+              nameEn: 1,
+              nameBn: 1,
+              slug: 1,
+              status: 1,
+            },
+          },
+        ],
+      },
+    },
+
+    {
+      $unwind: {
+        path: "$trackDetails",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+
+    {
+      $lookup: {
+        from: "subjects",
+        localField: "subject",
+        foreignField: "_id",
+        as: "subjectDetails",
+        pipeline: [
+          {
+            $project: {
+              nameBn: 1,
+              nameEn: 1,
+              code: 1,
+              colorCode: 1,
+              status: 1,
+              slug: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: "$subjectDetails",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $lookup: {
+        from: "topics",
+        localField: "topic",
+        foreignField: "_id",
+        as: "topicDetails",
+        pipeline: [
+          { $project: { nameBn: 1, nameEn: 1, slug: 1, status: 1 } },
+        ],
+      },
+    },
+    {
+      $unwind: { path: "$topicDetails", preserveNullAndEmptyArrays: true },
+    },
+    {
+      $lookup: {
+        from: "pastexams",
+        localField: "pastExam",
+        foreignField: "_id",
+        as: "pastExamDetails",
+        pipeline: [
+          {
+            $project: {
+              nameBn: 1,
+              nameEn: 1,
+              year: 1,
+              slug: 1,
+              status: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: "$pastExamDetails",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+  );
+
+
+  if (includeInActiveQuestion) {
+    const conditions = [
+      {
+        "questionDetails.status": {
+          $ne: QUESTION_STATUS.PUBLISHED,
+        },
+      },
+      {
+        "collectionDetails.status": {
+          $ne: COLLECTION_STATUS.PUBLISHED,
+        },
+      },
+      {
+        "categoryDetails.status": {
+          $ne: categoryStatus.PUBLISHED,
+        },
+      },
+      {
+        "subjectDetails.status": {
+          $ne: SUBJECT_STATUS.PUBLISHED,
+        },
+      },
+      {
+        "topicDetails.status": {
+          $ne: TOPIC_STATUS.PUBLISHED,
+        },
+      },
+      {
+        track: { $ne: null },
+        "trackDetails.status": { $ne: trackStatus.PUBLISHED },
+      },
+
+      {
+        pastExam: { $ne: null },
+        "pastExamDetails.status": { $ne: EXAM_STATUS.PUBLISHED },
+      },
+    ];
+
+    pipeline.push({
+      $match: {
+        $or: conditions
+      }
+    })
+
+  }
+
+
+  pipeline.push({
+    $project: {
+      _id: 0,
+      mappingId: "$_id",
+      marks: '$marks',
+      sortOrder: 1,
+      year: "$year",
+      createdAt: "$createdAt",
+
+      // collection Details: 
+      collection: {
+        collectionId: "$collectionDetails._id",
+        nameEn: '$collectionDetails.nameEn',
+        nameBn: '$collectionDetails.nameBn',
+        slug: '$collectionDetails.slug',
+        status: '$collectionDetails.status',
+      },
+
+      // category details
+      category: {
+        categoryId: "$categoryDetails._id",
+        nameEn: '$categoryDetails.nameEn',
+        nameBn: '$categoryDetails.nameBn',
+        slug: '$categoryDetails.slug',
+        status: '$categoryDetails.status',
+      },
+
+      track: {
+        trackId: { $ifNull: ["$trackDetails._id", null] },
+        nameEn: { $ifNull: ['$trackDetails.nameEn', null] },
+        nameBn: { $ifNull: ['$trackDetails.nameBn', null] },
+        slug: { $ifNull: ['$trackDetails.slug', null] },
+        status: { $ifNull: ['$trackDetails.status', null] },
+      },
+
+      subject: {
+        subjectId: { $ifNull: ["$subjectDetails._id", null] },
+        nameEn: { $ifNull: ['$subjectDetails.nameEn', null] },
+        nameBn: { $ifNull: ['$subjectDetails.nameBn', null] },
+        code: { $ifNull: ['$subjectDetails.code', null] },
+        colorCode: { $ifNull: ['$subjectDetails.colorCode', null] },
+        status: { $ifNull: ['$subjectDetails.status', null] },
+        slug: { $ifNull: ['$subjectDetails.slug', null] },
+      },
+
+      topic: {
+        topicId: { $ifNull: ["$topicDetails._id", null] },
+        nameEn: { $ifNull: ['$topicDetails.nameEn', null] },
+        nameBn: { $ifNull: ['$topicDetails.nameBn', null] },
+        slug: { $ifNull: ['$topicDetails.slug', null] },
+        status: { $ifNull: ['$topicDetails.status', null] },
+      },
+
+      pastExam: {
+        pastExamId: { $ifNull: ["$pastExamDetails._id", null] },
+        nameEn: { $ifNull: ['$pastExamDetails.nameEn', null] },
+        nameBn: { $ifNull: ['$pastExamDetails.nameBn', null] },
+        year: { $ifNull: ['$pastExamDetails.year', null] },
+        slug: { $ifNull: ['$pastExamDetails.slug', null] },
+        status: { $ifNull: ['$pastExamDetails.status', null] },
+      },
+
+      question: {
+        id: "$questionDetails._id",
+        code: "$questionDetails.code",
+        slug: "$questionDetails.slug",
+        type: "$questionDetails.type",
+        difficulty: "$questionDetails.difficulty",
+        status: "$questionDetails.status",
+        isFlagged: "$questionDetails.isFlagged",
+        passageId: { $ifNull: ["$questionDetails.passageId", null] },
+      },
+
+      questionVersion: {
+        stem: { $ifNull: ["$currentVersion.stem", null] },
+        plainStem: { $ifNull: ["$currentVersion.plainStem", null] },
+        explanation: { $ifNull: ["$currentVersion.explanation", null] },
+        language: { $ifNull: ["$currentVersion.language", "bn"] },
+        mediaUrl: { $ifNull: ["$currentVersion.mediaUrl", null] },
+        options: { $ifNull: ["$currentVersion.options", []] },
+        acceptedAnswers: { $ifNull: ["$currentVersion.acceptedAnswers", []] },
+        pairs: { $ifNull: ["$currentVersion.pairs", []] },
+        orderingItems: { $ifNull: ["$currentVersion.orderingItems", []] },
+      },
+    }
+  })
+
+
 
   pipeline.push({ $sort: { [sortBy]: sortOrder } });
 
@@ -784,13 +1179,45 @@ const getQuestionMappingById = async (id: string) => {
 
 // 5. DELETE QUESTION MAPPING BY ID
 const deleteQuestionMappingById = async (id: string) => {
-  const result = await QuestionMapping.findOneAndDelete({ _id: id });
+  const existingMapping = await QuestionMapping.findById(id);
 
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, "QuestionMapping not found");
+  if (!existingMapping) {
+    throw new NotFoundError("Question mapping not found.");
   }
 
-  return result;
+  // TODO: ভবিষ্যতে Exam মডিউল আসলে চেক করবেন:
+  // const isUsedInExam = await Exam.exists({ "questions.mappingId": id });
+  // if (isUsedInExam) throw new BadRequest("Cannot delete: used in exams.");
+
+  const mongoSession = await mongoose.startSession();
+
+  try {
+    mongoSession.startTransaction();
+
+    // ১. PastExam থাকলে mappedQuestions ১ কমাতে হবে
+    if (existingMapping.pastExam) {
+      await PastExam.findByIdAndUpdate(
+        existingMapping.pastExam,
+        { $inc: { mappedQuestions: -1 } },
+        { session: mongoSession },
+      );
+    }
+
+    // ২. ম্যাপিং ডিলিট
+    const deletedMapping = await QuestionMapping.findByIdAndDelete(id, {
+      session: mongoSession,
+    });
+
+    await mongoSession.commitTransaction();
+    return deletedMapping;
+  } catch (error) {
+    if (mongoSession.inTransaction()) {
+      await mongoSession.abortTransaction();
+    }
+    throw error;
+  } finally {
+    await mongoSession.endSession();
+  }
 };
 
 export const questionMappingServices = {

@@ -84,12 +84,22 @@ const getAllQuestionMappingSchema = z.object({
     subjectIds: multipleMongooseId("Subject ID").optional(),
     topicIds: multipleMongooseId("Topic ID").optional(),
     pastExamIds: multipleMongooseId("Past Exam").optional(),
-    year: requiredString("Year")
-      .regex(
-        /^(19[7-9]\d|20\d{2}|2100)$/,
-        "Provide a valid year between 1971 and 2100.",
+    years: z
+      .array(
+        requiredString("Year").regex(
+          /^(19[7-9]\d|20\d{2}|2100)$/,
+          "Provide a valid year between 1971 and 2100.",
+        ),
+        {
+          error: "Year must be a list of years.",
+        },
       )
-      .optional(),
+      .optional()
+      .transform((val) => {
+        if (!val?.length) return [];
+
+        return [...new Set(val.map((year) => year.trim()))];
+      }),
 
     // Question Filters:
     type: z
@@ -102,7 +112,7 @@ const getAllQuestionMappingSchema = z.object({
       {
         error: "Difficulty must be list of difficulty type.",
       },
-    ),
+    ).optional(),
     includeInActiveQuestion: requiredStrBoolean("Include inactive question")
       .optional()
       .default(false),
