@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bunx tsx --watch ./src/server.ts"
+    "dev": "bunx tsx --watch ./src/server.ts",
+    "seed": "bun run ./src/app/seeds/seed-sample-data.ts"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",

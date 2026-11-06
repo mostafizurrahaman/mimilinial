@@ -673,6 +673,9 @@ const getAllQuestionMapping = async (
     includeInActiveQuestion,
   } = query;
 
+
+  console.log(type)
+
   const {
     page,
     limit,
@@ -799,23 +802,9 @@ const getAllQuestionMapping = async (
     };
   }
 
-  // Lookup version:
-  pipeline.push(
-    {
-      $lookup: {
-        from: "questions",
-        localField: "question",
-        foreignField: "_id",
-        as: "questionDetails",
-      },
-    },
-    {
-      $unwind: {
-        path: "$questionDetails",
-        preserveNullAndEmptyArrays: false,
-      },
-    },
-  );
+  if (Object.keys(questionClassificationMatchingStage.$match).length > 0) {
+    pipeline.push(questionClassificationMatchingStage);
+  }
 
   // Question Live version lookup:
   pipeline.push(
@@ -1131,10 +1120,34 @@ const getAllQuestionMapping = async (
         explanation: { $ifNull: ["$currentVersion.explanation", null] },
         language: { $ifNull: ["$currentVersion.language", "bn"] },
         mediaUrl: { $ifNull: ["$currentVersion.mediaUrl", null] },
-        options: { $ifNull: ["$currentVersion.options", []] },
-        acceptedAnswers: { $ifNull: ["$currentVersion.acceptedAnswers", []] },
-        pairs: { $ifNull: ["$currentVersion.pairs", []] },
-        orderingItems: { $ifNull: ["$currentVersion.orderingItems", []] },
+        orderingItems: {
+          $cond: [
+            { $eq: ["$questionDetails.type", "ordering"] },
+            "$currentVersion.orderingItems",
+            "$$REMOVE",
+          ],
+        },
+        pairs: {
+          $cond: [
+            { $eq: ["$questionDetails.type", "matching"] },
+            "$currentVersion.pairs",
+            "$$REMOVE",
+          ],
+        },
+        acceptedAnswers: {
+          $cond: [
+            { $eq: ["$questionDetails.type", "fill_blank"] },
+            "$currentVersion.acceptedAnswers",
+            "$$REMOVE",
+          ],
+        },
+        options: {
+          $cond: [
+            { $in: ["$questionDetails.type", ["true_false", "single_mcq", "multi_mcq"]] },
+            "$currentVersion.options",
+            "$$REMOVE",
+          ],
+        }
       },
     }
   })
@@ -1155,6 +1168,8 @@ const getAllQuestionMapping = async (
   const data = aggregated?.[0]?.data || [];
   const total = aggregated?.[0]?.meta?.[0]?.total || 0;
 
+
+
   return {
     data,
     meta: {
@@ -1168,13 +1183,309 @@ const getAllQuestionMapping = async (
 
 // 4. GET QUESTION MAPPING BY ID
 const getQuestionMappingById = async (id: string) => {
-  const result = await QuestionMapping.findById(id);
+  const objectId = new mongoose.Types.ObjectId(id);
 
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, "QuestionMapping not found");
+  const pipeline: PipelineStage[] = [
+    { $match: { _id: objectId } },
+    {
+      $lookup: {
+        from: "questions",
+        localField: "question",
+        foreignField: "_id",
+        as: "questionDetails",
+      },
+    },
+    {
+      $unwind: {
+        path: "$questionDetails",
+        preserveNullAndEmptyArrays: false,
+      },
+    },
+    {
+      $lookup: {
+        from: "questionversions",
+        let: {
+          questionId: "$questionDetails._id",
+        },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $eq: ["$$questionId", "$question"],
+              },
+              isCurrent: true,
+            },
+          },
+        ],
+        as: "currentVersion",
+      },
+    },
+    {
+      $unwind: {
+        path: "$currentVersion",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $lookup: {
+        from: "collections",
+        localField: "coll",
+        foreignField: "_id",
+        as: "collectionDetails",
+        pipeline: [
+          {
+            $project: {
+              nameEn: 1,
+              nameBn: 1,
+              slug: 1,
+              status: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: "$collectionDetails",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $lookup: {
+        from: "categories",
+        localField: "category",
+        foreignField: "_id",
+        as: "categoryDetails",
+        pipeline: [
+          {
+            $project: {
+              nameEn: 1,
+              nameBn: 1,
+              slug: 1,
+              status: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: "$categoryDetails",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $lookup: {
+        from: "tracks",
+        localField: "track",
+        foreignField: "_id",
+        as: "trackDetails",
+        pipeline: [
+          {
+            $project: {
+              nameEn: 1,
+              nameBn: 1,
+              slug: 1,
+              status: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: "$trackDetails",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $lookup: {
+        from: "subjects",
+        localField: "subject",
+        foreignField: "_id",
+        as: "subjectDetails",
+        pipeline: [
+          {
+            $project: {
+              nameBn: 1,
+              nameEn: 1,
+              code: 1,
+              colorCode: 1,
+              status: 1,
+              slug: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: "$subjectDetails",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $lookup: {
+        from: "topics",
+        localField: "topic",
+        foreignField: "_id",
+        as: "topicDetails",
+        pipeline: [
+          { $project: { nameBn: 1, nameEn: 1, slug: 1, status: 1 } },
+        ],
+      },
+    },
+    {
+      $unwind: { path: "$topicDetails", preserveNullAndEmptyArrays: true },
+    },
+    {
+      $lookup: {
+        from: "pastexams",
+        localField: "pastExam",
+        foreignField: "_id",
+        as: "pastExamDetails",
+        pipeline: [
+          {
+            $project: {
+              nameBn: 1,
+              nameEn: 1,
+              year: 1,
+              slug: 1,
+              status: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: "$pastExamDetails",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        mappingId: "$_id",
+        marks: "$marks",
+        sortOrder: 1,
+        year: "$year",
+        createdAt: "$createdAt",
+        updatedAt: "$updatedAt",
+
+        collection: {
+          collectionId: "$collectionDetails._id",
+          nameEn: "$collectionDetails.nameEn",
+          nameBn: "$collectionDetails.nameBn",
+          slug: "$collectionDetails.slug",
+          status: "$collectionDetails.status",
+        },
+
+        category: {
+          categoryId: "$categoryDetails._id",
+          nameEn: "$categoryDetails.nameEn",
+          nameBn: "$categoryDetails.nameBn",
+          slug: "$categoryDetails.slug",
+          status: "$categoryDetails.status",
+        },
+
+        track: {
+          trackId: { $ifNull: ["$trackDetails._id", null] },
+          nameEn: { $ifNull: ["$trackDetails.nameEn", null] },
+          nameBn: { $ifNull: ["$trackDetails.nameBn", null] },
+          slug: { $ifNull: ["$trackDetails.slug", null] },
+          status: { $ifNull: ["$trackDetails.status", null] },
+        },
+
+        subject: {
+          subjectId: { $ifNull: ["$subjectDetails._id", null] },
+          nameEn: { $ifNull: ["$subjectDetails.nameEn", null] },
+          nameBn: { $ifNull: ["$subjectDetails.nameBn", null] },
+          code: { $ifNull: ["$subjectDetails.code", null] },
+          colorCode: { $ifNull: ["$subjectDetails.colorCode", null] },
+          status: { $ifNull: ["$subjectDetails.status", null] },
+          slug: { $ifNull: ["$subjectDetails.slug", null] },
+        },
+
+        topic: {
+          topicId: { $ifNull: ["$topicDetails._id", null] },
+          nameEn: { $ifNull: ["$topicDetails.nameEn", null] },
+          nameBn: { $ifNull: ["$topicDetails.nameBn", null] },
+          slug: { $ifNull: ["$topicDetails.slug", null] },
+          status: { $ifNull: ["$topicDetails.status", null] },
+        },
+
+        pastExam: {
+          pastExamId: { $ifNull: ["$pastExamDetails._id", null] },
+          nameEn: { $ifNull: ["$pastExamDetails.nameEn", null] },
+          nameBn: { $ifNull: ["$pastExamDetails.nameBn", null] },
+          year: { $ifNull: ["$pastExamDetails.year", null] },
+          slug: { $ifNull: ["$pastExamDetails.slug", null] },
+          status: { $ifNull: ["$pastExamDetails.status", null] },
+        },
+
+        question: {
+          id: "$questionDetails._id",
+          code: "$questionDetails.code",
+          slug: "$questionDetails.slug",
+          type: "$questionDetails.type",
+          difficulty: "$questionDetails.difficulty",
+          status: "$questionDetails.status",
+          isFlagged: "$questionDetails.isFlagged",
+          passageId: { $ifNull: ["$questionDetails.passageId", null] },
+        },
+
+        questionVersion: {
+          stem: { $ifNull: ["$currentVersion.stem", null] },
+          plainStem: { $ifNull: ["$currentVersion.plainStem", null] },
+          explanation: { $ifNull: ["$currentVersion.explanation", null] },
+          language: { $ifNull: ["$currentVersion.language", "bn"] },
+          mediaUrl: { $ifNull: ["$currentVersion.mediaUrl", null] },
+          orderingItems: {
+            $cond: [
+              { $eq: ["$questionDetails.type", "ordering"] },
+              "$currentVersion.orderingItems",
+              "$$REMOVE",
+            ],
+          },
+          pairs: {
+            $cond: [
+              { $eq: ["$questionDetails.type", "matching"] },
+              "$currentVersion.pairs",
+              "$$REMOVE",
+            ],
+          },
+          acceptedAnswers: {
+            $cond: [
+              { $eq: ["$questionDetails.type", "fill_blank"] },
+              "$currentVersion.acceptedAnswers",
+              "$$REMOVE",
+            ],
+          },
+          options: {
+            $cond: [
+              {
+                $in: [
+                  "$questionDetails.type",
+                  ["true_false", "single_mcq", "multi_mcq"],
+                ],
+              },
+              "$currentVersion.options",
+              "$$REMOVE",
+            ],
+          },
+        },
+      },
+    },
+  ];
+
+  const results = await QuestionMapping.aggregate(pipeline);
+
+  if (!results || results.length === 0) {
+    throw new NotFoundError("Question mapping not found.");
   }
 
-  return result;
+  return results[0];
 };
 
 // 5. DELETE QUESTION MAPPING BY ID

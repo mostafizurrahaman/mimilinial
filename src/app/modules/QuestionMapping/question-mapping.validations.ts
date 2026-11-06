@@ -65,6 +65,18 @@ const updateQuestionMappingSchema = z.object({
   }),
 });
 
+const parseCommaSeparatedQuery = (val: unknown): string[] | undefined => {
+  if (val === undefined || val === null) return undefined;
+  const rawList = Array.isArray(val) ? val : [val];
+  const items = rawList
+    .flatMap((item) => (typeof item === "string" ? item.split(",") : []))
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (items.length === 0) return undefined;
+  return [...new Set(items)];
+};
+
 // 3. GET ALL QUESTION MAPPING
 const getAllQuestionMappingSchema = z.object({
   query: z.object({
@@ -85,34 +97,57 @@ const getAllQuestionMappingSchema = z.object({
     topicIds: multipleMongooseId("Topic ID").optional(),
     pastExamIds: multipleMongooseId("Past Exam").optional(),
     years: z
-      .array(
-        requiredString("Year").regex(
-          /^(19[7-9]\d|20\d{2}|2100)$/,
-          "Provide a valid year between 1971 and 2100.",
-        ),
-        {
-          error: "Year must be a list of years.",
-        },
-      )
+      .union([z.string(), z.array(z.string())], {
+        error: "Years must be a comma-separated string or an array of years.",
+      })
       .optional()
-      .transform((val) => {
-        if (!val?.length) return [];
-
-        return [...new Set(val.map((year) => year.trim()))];
-      }),
+      .transform(parseCommaSeparatedQuery)
+      .refine(
+        (val) =>
+          !val ||
+          val.every((year) => /^(19[7-9]\d|20\d{2}|2100)$/.test(year)),
+        {
+          message:
+            "Each year must be a valid 4-digit year between 1971 and 2100.",
+        },
+      ),
 
     // Question Filters:
     type: z
-      .array(optionalEnumString(QUESTION_TYPE_VALUES, "Question type"), {
-        error: "Type must be list of question type.",
+      .union([z.string(), z.array(z.string())], {
+        error:
+          "Question type must be a comma-separated string or an array of types.",
       })
-      .optional(),
-    difficulty: z.array(
-      optionalEnumString(QUESTION_DIFFICULTY_VALUES, "Difficulty"),
-      {
-        error: "Difficulty must be list of difficulty type.",
-      },
-    ).optional(),
+      .optional()
+      .transform(parseCommaSeparatedQuery)
+      .refine(
+        (val) =>
+          !val ||
+          val.every((t) =>
+            (QUESTION_TYPE_VALUES as readonly string[]).includes(t),
+          ),
+        {
+          message: `Each question type must be one of: ${QUESTION_TYPE_VALUES.join(", ")}.`,
+        },
+      ),
+
+    difficulty: z
+      .union([z.string(), z.array(z.string())], {
+        error:
+          "Difficulty must be a comma-separated string or an array of difficulties.",
+      })
+      .optional()
+      .transform(parseCommaSeparatedQuery)
+      .refine(
+        (val) =>
+          !val ||
+          val.every((d) =>
+            (QUESTION_DIFFICULTY_VALUES as readonly string[]).includes(d),
+          ),
+        {
+          message: `Each difficulty must be one of: ${QUESTION_DIFFICULTY_VALUES.join(", ")}.`,
+        },
+      ),
     includeInActiveQuestion: requiredStrBoolean("Include inactive question")
       .optional()
       .default(false),
