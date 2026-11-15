@@ -994,41 +994,38 @@ const getAllQuestionMapping = async (
   );
 
 
-  if (includeInActiveQuestion) {
+  if (!includeInActiveQuestion) {
     const conditions = [
       {
-        "questionDetails.status": {
-          $ne: QUESTION_STATUS.PUBLISHED,
-        },
-      },
-      {
-        "collectionDetails.status": {
-          $ne: COLLECTION_STATUS.PUBLISHED,
-        },
+        "questionDetails.status": 
+          $eq: QUESTION_STATUS.PUBLISHED,
+        
+      
+        "collectionDetails.status": ,
       },
       {
         "categoryDetails.status": {
-          $ne: categoryStatus.PUBLISHED,
+          $eq: categoryStatus.PUBLISHED,
         },
       },
       {
         "subjectDetails.status": {
-          $ne: SUBJECT_STATUS.PUBLISHED,
+          $eq: SUBJECT_STATUS.PUBLISHED,
         },
       },
       {
         "topicDetails.status": {
-          $ne: TOPIC_STATUS.PUBLISHED,
+          $eq: TOPIC_STATUS.PUBLISHED,
         },
       },
       {
         track: { $ne: null },
-        "trackDetails.status": { $ne: trackStatus.PUBLISHED },
+        "trackDetails.status": { $eq: trackStatus.PUBLISHED },
       },
 
       {
         pastExam: { $ne: null },
-        "pastExamDetails.status": { $ne: EXAM_STATUS.PUBLISHED },
+        "pastExamDetails.status": { $eq: EXAM_STATUS.PUBLISHED },
       },
     ];
 

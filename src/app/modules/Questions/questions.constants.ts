@@ -76,6 +76,7 @@ export const questionProjections = {
     // Current Version:
     versionNumber: { $ifNull: ["$currentVersion.versionNumber", 0] },
     stem: { $ifNull: ["$currentVersion.stem", null] },
+    plainStem: {$ifNull: ["$currentVersion.plainStem", null] },
     explanation: { $ifNull: ["$currentVersion.explanation", null] },
     isCurrent: { $ifNull: ["$currentVersion.isCurrent", null] },
     language: { $ifNull: ["$currentVersion.language", null] },
@@ -132,6 +133,7 @@ export const questionProjections = {
     passageTitleEn: { $ifNull: ["$passageDetails.titleEn", null] },
     passageTitleBn: { $ifNull: ["$passageDetails.titleBn", null] },
     stem: { $ifNull: ["$currentVersion.stem", null] },
+    plainStem: {$ifNull: ["$currentVersion.plainStem", null] },
     language: { $ifNull: ["$currentVersion.language", null] },
 
     orderingItems: {
@@ -169,6 +171,7 @@ export const questionProjections = {
     code: "$code",
     slug: "$slug",
     stem: "$plainStem",
+    plainStem: {$ifNull: ["$currentVersion.plainStem", null] },
     difficulty: "$difficulty",
     status: "$status",
   },

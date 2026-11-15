@@ -1,3 +1,9 @@
 {
-  "cSpell.words": ["Bangla"]
+  "cSpell.words": ["Bangla"],
+  "workbench.colorCustomizations": {
+    "titleBar.activeBackground": "#257238",
+    "titleBar.activeForeground": "#FFFFFF",
+    "titleBar.inactiveBackground": "#251822",
+    "titleBar.inactiveForeground": "#A6ADC8"
+  }
 }
