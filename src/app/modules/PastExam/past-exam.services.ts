@@ -25,7 +25,7 @@ const createPastExam = async (
   user: IUserDoc,
   payload: TCreatePastExamPayloadType,
 ) => {
-  const { category, track, nameBn, nameEn, year, description, totalQuestions } =
+  const { category, track, nameBn, nameEn, year, description, totalQuestions, durationMins, examDate } =
     payload;
 
   const existingCategory = await Category.findById(category);
@@ -83,6 +83,8 @@ const createPastExam = async (
     year,
     description: description || null,
     totalQuestions: totalQuestions || 0,
+    durationMins: durationMins || 60,
+    examDate,
     status: EXAM_STATUS.DRAFT,
     author: user?._id,
   });
@@ -186,6 +188,8 @@ const updatePastExam = async (
   if (payload.totalQuestions !== undefined)
     existingExam.totalQuestions = payload.totalQuestions;
   if (payload.status !== undefined) existingExam.status = payload.status;
+  if (payload.examDate !== undefined) existingExam.examDate = payload.examDate as unknown as Date 
+  if (payload.durationMins !== undefined) existingExam.durationMins = payload.durationMins;
 
   await existingExam.save({ validateBeforeSave: true });
 

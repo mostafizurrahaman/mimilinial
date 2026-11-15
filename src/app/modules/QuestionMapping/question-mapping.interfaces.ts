@@ -23,4 +23,4 @@ export interface IQuestionMapping {
   author: Types.ObjectId;
 }
 
-export interface IQuestionMappingDoc extends Document, IQuestionMapping {}
+export interface IQuestionMappingDoc extends Document, IQuestionMapping { }

@@ -12,6 +12,8 @@ export interface IPastExam {
   mappedQuestions: number;
   description?: string | null;
   status: TExamStatusType;
+  durationMins: number; 
+  examDate?: Date | null; 
   publishedAt?: Date | null;
   archivedAt?: Date | null;
   author: Types.ObjectId;

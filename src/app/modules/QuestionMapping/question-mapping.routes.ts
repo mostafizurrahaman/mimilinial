@@ -24,6 +24,7 @@ router.post(
 // 2. UPDATE QUESTION MAPPING
 router.patch(
   "/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
   validateRequest(questionMappingValidations.updateQuestionMappingSchema),
   questionMappingControllers.updateQuestionMapping,
 );
@@ -45,6 +46,7 @@ router.get(
 // 5. DELETE QUESTION MAPPING BY ID
 router.delete(
   "/:id",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
   validateRequest(questionMappingValidations.deleteQuestionMappingByIdSchema),
   questionMappingControllers.deleteQuestionMappingById,
 );

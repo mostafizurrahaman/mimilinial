@@ -7,6 +7,8 @@ import {
   optionalDate,
   requiredMongooseId,
   multipleMongooseId,
+  requiredDate,
+  requiredNumber,
 } from "../../utils";
 import {
   EXAM_STATUS_VALUES,
@@ -33,6 +35,10 @@ const createPastExamSchema = z.object({
       .transform((val) => (val ? sanitizeHtmlContent(val as string) : val))
       .nullish(),
     totalQuestions: optionalNumber("Total questions").default(0),
+    durationMins: requiredNumber("Duration min.").min(1, {
+      error: "Min. duration min must be 1",
+    }),
+    examDate: requiredDate("Exam Date").optional().nullable(),
   }),
 });
 
@@ -56,6 +62,10 @@ const updatePastExamSchema = z.object({
       .transform((val) => (val ? sanitizeHtmlContent(val as string) : val))
       .nullish(),
     totalQuestions: optionalNumber("Total questions"),
+    durationMins: requiredNumber("Duration min.").min(1, {
+      error: "Min. duration min must be 1",
+    }).optional(),
+    examDate: requiredDate("Exam Date").optional().nullable(),
     status: optionalEnumString(EXAM_STATUS_VALUES, "Exam status"),
   }),
 });

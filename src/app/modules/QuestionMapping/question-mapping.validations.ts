@@ -8,9 +8,11 @@ import {
   requiredMongooseId,
   requiredNumber,
   multipleMongooseId,
+  requiredStrBoolean,
 } from "../../utils";
 import { questionMappingSortableFields } from "./question-mapping.constants";
 import { sortOrderValues } from "../../constants";
+import { QUESTION_DIFFICULTY_VALUES, QUESTION_TYPE_VALUES } from "../Questions";
 
 // 1. CREATE QUESTION MAPPING
 const createQuestionMappingSchema = z.object({
@@ -63,6 +65,18 @@ const updateQuestionMappingSchema = z.object({
   }),
 });
 
+const parseCommaSeparatedQuery = (val: unknown): string[] | undefined => {
+  if (val === undefined || val === null) return undefined;
+  const rawList = Array.isArray(val) ? val : [val];
+  const items = rawList
+    .flatMap((item) => (typeof item === "string" ? item.split(",") : []))
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (items.length === 0) return undefined;
+  return [...new Set(items)];
+};
+
 // 3. GET ALL QUESTION MAPPING
 const getAllQuestionMappingSchema = z.object({
   query: z.object({
@@ -75,19 +89,68 @@ const getAllQuestionMappingSchema = z.object({
     toDate: optionalDate("To date"),
 
     // Question IDS:
-    question: multipleMongooseId("Question ID").optional(),
-    coll: multipleMongooseId("Collection ID").optional(),
-    category: multipleMongooseId("Category ID").optional(),
-    track: multipleMongooseId("Track ID").optional(),
-    subject: multipleMongooseId("Subject ID").optional(),
-    topic: multipleMongooseId("Topic ID").optional(),
-    pastExam: multipleMongooseId("Past Exam").optional(),
-    year: requiredString("Year")
-      .regex(
-        /^(19[7-9]\d|20\d{2}|2100)$/,
-        "Provide a valid year between 1971 and 2100.",
-      )
-      .optional(),
+    questionIds: multipleMongooseId("Question ID").optional(),
+    collectionIds: multipleMongooseId("Collection ID").optional(),
+    categoryIds: multipleMongooseId("Category ID").optional(),
+    trackIds: multipleMongooseId("Track ID").optional(),
+    subjectIds: multipleMongooseId("Subject ID").optional(),
+    topicIds: multipleMongooseId("Topic ID").optional(),
+    pastExamIds: multipleMongooseId("Past Exam").optional(),
+    years: z
+      .union([z.string(), z.array(z.string())], {
+        error: "Years must be a comma-separated string or an array of years.",
+      })
+      .optional()
+      .transform(parseCommaSeparatedQuery)
+      .refine(
+        (val) =>
+          !val ||
+          val.every((year) => /^(19[7-9]\d|20\d{2}|2100)$/.test(year)),
+        {
+          message:
+            "Each year must be a valid 4-digit year between 1971 and 2100.",
+        },
+      ),
+
+    // Question Filters:
+    type: z
+      .union([z.string(), z.array(z.string())], {
+        error:
+          "Question type must be a comma-separated string or an array of types.",
+      })
+      .optional()
+      .transform(parseCommaSeparatedQuery)
+      .refine(
+        (val) =>
+          !val ||
+          val.every((t) =>
+            (QUESTION_TYPE_VALUES as readonly string[]).includes(t),
+          ),
+        {
+          message: `Each question type must be one of: ${QUESTION_TYPE_VALUES.join(", ")}.`,
+        },
+      ),
+
+    difficulty: z
+      .union([z.string(), z.array(z.string())], {
+        error:
+          "Difficulty must be a comma-separated string or an array of difficulties.",
+      })
+      .optional()
+      .transform(parseCommaSeparatedQuery)
+      .refine(
+        (val) =>
+          !val ||
+          val.every((d) =>
+            (QUESTION_DIFFICULTY_VALUES as readonly string[]).includes(d),
+          ),
+        {
+          message: `Each difficulty must be one of: ${QUESTION_DIFFICULTY_VALUES.join(", ")}.`,
+        },
+      ),
+    includeInActiveQuestion: requiredStrBoolean("Include inactive question")
+      .optional()
+      .default(false),
   }),
 });
 

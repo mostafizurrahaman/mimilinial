@@ -2,7 +2,6 @@ import httpStatus from "http-status";
 import type { PipelineStage } from "mongoose";
 
 import {
-  AppError,
   BadRequest,
   ConflictError,
   NotFoundError,
@@ -2501,34 +2500,82 @@ const getQuestionByID = async (
   query: TGetQuestionByIDQueryType,
 ) => {
   const { includeAllVersion } = query;
+  const objectId = new mongoose.Types.ObjectId(id);
 
-  console.log(includeAllVersion);
-  const question = await Question.findById(id);
-  if (!question) {
+  const pipeline: PipelineStage[] = [
+    { $match: { _id: objectId } },
+    {
+      $lookup: {
+        from: "passages",
+        localField: "passageId",
+        foreignField: "_id",
+        as: "passageDetails",
+      },
+    },
+    {
+      $unwind: {
+        path: "$passageDetails",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "author",
+        foreignField: "_id",
+        as: "authorDetails",
+      },
+    },
+    {
+      $unwind: {
+        path: "$authorDetails",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $lookup: {
+        from: "questionversions",
+        as: "currentVersion",
+        let: { questionId: "$_id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $eq: ["$$questionId", "$question"],
+              },
+              isCurrent: true,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: {
+        path: "$currentVersion",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $project: questionProjections.details,
+    },
+  ];
+
+  const results = await Question.aggregate(pipeline);
+  if (!results || results.length === 0) {
     throw new NotFoundError("Question not found.");
   }
 
-  const formattedResponse: Record<string, unknown> = {
-    question,
-  };
+  const result = results[0] as Record<string, unknown>;
 
   if (includeAllVersion) {
     const versions = await QuestionVersion.find({
-      question: question?._id,
+      question: objectId,
     });
 
-    formattedResponse["versions"] = versions || [];
+    result["versions"] = versions || [];
   }
 
-  // find the latest version
-  const currentVersion = await QuestionVersion.findOne({
-    isCurrent: true,
-    question: question?._id,
-  });
-
-  formattedResponse["currentVersion"] = currentVersion ?? null;
-
-  return formattedResponse;
+  return result;
 };
 
 // 13. GET ALL QUESTIONS:
@@ -2697,7 +2744,7 @@ const getAllQuestionsFromDB = async (query: TGetAllQuestionQueryType) => {
 
   const projectedFields =
     questionProjections[
-      (projection as "list" | "options" | "details") || "list"
+    (projection as "list" | "options" | "details") || "list"
     ];
 
   pipeline.push({ $project: projectedFields });
@@ -2736,10 +2783,14 @@ const getAllQuestionsFromDB = async (query: TGetAllQuestionQueryType) => {
 const getAllPublishedQuestionsFromDB = async (
   query: TGetAllQuestionQueryType,
 ) => {
+
+  console.log({
+    query
+  })
   return await getAllQuestionsFromDB({
     ...query,
     status: QUESTION_STATUS.PUBLISHED,
-    isFlagged: true,
+    isFlagged: false,
   });
 };
 

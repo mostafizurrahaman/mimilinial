@@ -10,6 +10,7 @@ import { passageRoutes } from "../modules/Passage";
 import { questionsRoutes } from "../modules/Questions";
 import { mediaRoutes } from "../modules/Media";
 import { pastExamRoutes } from "../modules/PastExam";
+import { questionMappingRoutes } from "../modules/QuestionMapping";
 
 const router: Router = express();
 
@@ -57,6 +58,10 @@ const routes = [
   {
     path: "/past-exam",
     route: pastExamRoutes,
+  },
+  {
+    path: "/question-mapping",
+    route: questionMappingRoutes,
   },
 ];
 

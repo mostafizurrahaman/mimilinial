@@ -122,3 +122,5 @@ meta_title : string (nullable) — যেমন: "৯ম গ্রেড বে�
 meta_description : text (nullable)
 canonical_url : string (nullable)
 ```
+
+

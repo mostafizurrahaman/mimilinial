@@ -75,6 +75,15 @@ const pastExamSchema = new Schema<IPastExamDoc>(
       type: Date,
       default: null,
     },
+    durationMins: { 
+      type: Number,
+      min:  1,
+      required:true
+    }, 
+    examDate:{ 
+      type:Date, 
+    },
+  
   },
   {
     timestamps: true,
