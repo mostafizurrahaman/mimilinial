@@ -1,40 +1,51 @@
-export const examSearchableFields = ['name'] as const;
-export const examSortableFields = ['createdAt', 'updatedAt'] as const;
+export const examSearchableFields = ["title", "slug"] as const;
+export const examSortableFields = [
+  "createdAt",
+  "updatedAt",
+  "totalMarks",
+  "durationMins",
+] as const;
 
-// Exam Level: 
+// 1. Exam Level
 export const EXAM_LEVEL = {
-    CATEGORY: "category", 
-    TRACK: "topic", 
-    SUBJECT: 'subject', 
-    TOPIC: "topic"
-} as const; 
-export const examLevelValues = Object.values(EXAM_LEVEL)
-export type TExamLevelType = typeof EXAM_LEVEL[keyof typeof EXAM_LEVEL]
-
-// Generation mode: 
-export const GENERATION_MODE = {
-    RANDOM: "random", 
-    MANUAL: "manual"  
-}  as const; 
-export const generationModeValues = Object.values(GENERATION_MODE)
-export type TGenerationModeType = typeof GENERATION_MODE[keyof typeof GENERATION_MODE]
-
-// Exam Type: 
-export const EXAM_TYPE = {
-  LIVE: "live",             // 1. Schedule Live exam (Start and End time)
-  MODEL_TEST: "model_test", // 2. Model test (Student can attend any time)
-  ARCHIVE: "archive",       // 3. Past live exam.
+  CATEGORY: "category",
+  TRACK: "track",
+  SUBJECT: "subject",
+  TOPIC: "topic",
 } as const;
 
+export const examLevelValues = Object.values(EXAM_LEVEL);
+export type TExamLevelType = (typeof EXAM_LEVEL)[keyof typeof EXAM_LEVEL];
+
+// 2. Generation Mode
+export const GENERATION_MODE = {
+  RANDOM: "random",
+  MANUAL: "manual",
+} as const;
+
+export const generationModeValues = Object.values(GENERATION_MODE);
+export type TGenerationModeType =
+  (typeof GENERATION_MODE)[keyof typeof GENERATION_MODE];
+
+// 3. Exam Type
+export const EXAM_TYPE = {
+  LIVE: "live",             // Scheduled live exam with strict start and end window
+  MODEL_TEST: "model_test", // Open practice model test (students can attend anytime)
+  ARCHIVE: "archive",       // Past live exam converted to archive
+} as const;
+
+export const examTypeValues = Object.values(EXAM_TYPE);
 export type TExamType = (typeof EXAM_TYPE)[keyof typeof EXAM_TYPE];
 
-
-// Exam Status: 
+// 4. Exam Status
 export const EXAM_STATUS = {
-    DRAFT: "draft", 
-    PUBLISHED: "published",
-    ARCHIVED: "archived"
-}
+  DRAFT: "draft",
+  PUBLISHED: "published",
+  ARCHIVED: "archived",
+} as const;
+
+export const examStatusValues = Object.values(EXAM_STATUS);
+export type TExamStatusType = (typeof EXAM_STATUS)[keyof typeof EXAM_STATUS];
 
 export type TExamSearchableField = (typeof examSearchableFields)[number];
 export type TExamSortableField = (typeof examSortableFields)[number];

@@ -1,49 +1,74 @@
-import { Document, Types } from 'mongoose';
-import type { TExamLevelType, TExamType, TGenerationModeType } from './exam.constants';
-import type { TExamStatusType } from '../PastExam';
+import { Document, Types } from "mongoose";
+import type {
+  TExamLevelType,
+  TExamType,
+  TGenerationModeType,
+  TExamStatusType,
+} from "./exam.constants";
 
 export interface IExam {
-  title: string; // exam title
-  slug: string; 
-  description: string; 
+  title: string;
+  slug: string;
+  description?: string | null;
 
-  // Exam level: 
-  examLevel: TExamLevelType; 
+  // 1. Exam Level
+  examLevel: TExamLevelType;
 
-  // Syllabus Hirarchy
-  category?: Types.ObjectId | null; 
-  track?: Types.ObjectId | null; 
-  subject?: Types.ObjectId | null; 
-  topic?: Types.ObjectId | null; 
+  // 2. Syllabus Hierarchy
+  category: Types.ObjectId;             // Required for all levels
+  track?: Types.ObjectId | null;        // Used when examLevel === "track"
+  subject?: Types.ObjectId | null;      // Used when examLevel is "subject" or "topic"
+  topics?: Types.ObjectId[];            // Used when examLevel === "topic" (multiple topics)
 
-  // Generation Mode: 
-   generationMode: TGenerationModeType
+  // 3. Question Generation Mode
+  generationMode: TGenerationModeType;
 
-  // Time And Marks Settings: 
-  durationMins: number;  // total exam time
-  totalQuestions: number; // total question
-  marksPerQuestions: number;  // each question mark
-  negativeMarks: number; // each wrong answer minus this mark
-  totalMarks: number; // total mark
-  passMarks: number; // pass mark
+  // 4. Time and Marks Settings
+  durationMins: number;                 // Total exam duration in minutes
+  totalQuestions: number;               // Total question count
+  marksPerQuestion: number;             // Mark allocated for each question
+  negativeMarks: number;                // Marks deducted for each wrong answer
+  totalMarks: number;                   // Full marks (totalQuestions * marksPerQuestion)
+  passMarks: number;                    // Minimum marks required to pass
 
-  // Question mappings: 
-  questionMappings: Types.ObjectId[]; // total mapped question
+  // 5. Question Mappings
+  questionMappings: Types.ObjectId[];   // List of QuestionMapping IDs
 
-  // Configuration: 
-  isRandomized: boolean; // question randomized
-  isOptionShuffled: boolean; // question option shuffled 
-  isSpeedTest: boolean; // speed test. 
+  // 6. Configurations
+  isRandomized: boolean;                // Whether question sequence is randomized
+  isOptionShuffled: boolean;            // Whether option choices are shuffled
+  isSpeedTest: boolean;                 // Whether this is designated as a speed test
 
-  // Schedule and Status: 
-  examType: TExamType
-  startTime?: Date | null; // start time
-  endTime?: Date | null; // end time 
+  // 7. Schedule & Type
+  examType: TExamType;
+  startTime?: Date | null;              // Live exam start window
+  endTime?: Date | null;                // Live exam end window
 
-  // Exam Status: 
-  status:  TExamStatusType 
-  author: Types.ObjectId; // exam author 
-  editor: Types.ObjectId | null; // exam editor 
+  // 8. Status & Audit
+  status: TExamStatusType;
+  author: Types.ObjectId;
+  editor?: Types.ObjectId | null;
 }
 
 export interface IExamDoc extends Document, IExam {}
+
+// Typed Discriminator Interfaces
+export interface ICategoryExamDoc extends IExamDoc {
+  examLevel: "category";
+}
+
+export interface ITrackExamDoc extends IExamDoc {
+  examLevel: "track";
+  track: Types.ObjectId;
+}
+
+export interface ISubjectExamDoc extends IExamDoc {
+  examLevel: "subject";
+  subject: Types.ObjectId;
+}
+
+export interface ITopicExamDoc extends IExamDoc {
+  examLevel: "topic";
+  subject: Types.ObjectId;
+  topics: Types.ObjectId[];
+}
