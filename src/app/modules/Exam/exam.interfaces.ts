@@ -11,14 +11,14 @@ export interface IExam {
   slug: string;
   description?: string | null;
 
-  // 1. Exam Level
+  // 1. Exam Level: "category" | "subject" | "topic"
   examLevel: TExamLevelType;
 
   // 2. Syllabus Hierarchy
-  category: Types.ObjectId;             // Required for all levels
-  track?: Types.ObjectId | null;        // Used when examLevel === "track"
-  subject?: Types.ObjectId | null;      // Used when examLevel is "subject" or "topic"
-  topics?: Types.ObjectId[];            // Used when examLevel === "topic" (multiple topics)
+  category?: Types.ObjectId | null;     // Required for "category" exam; Optional for "subject" and "topic" (null = universal)
+  track?: Types.ObjectId | null;        // Optional sub-track for "category" exam (e.g. Technical Cadre)
+  subject?: Types.ObjectId | null;      // Required for "subject" and "topic" exams
+  topics?: Types.ObjectId[];            // Required for "topic" exam (multiple topics)
 
   // 3. Question Generation Mode
   generationMode: TGenerationModeType;
@@ -55,20 +55,19 @@ export interface IExamDoc extends Document, IExam {}
 // Typed Discriminator Interfaces
 export interface ICategoryExamDoc extends IExamDoc {
   examLevel: "category";
-}
-
-export interface ITrackExamDoc extends IExamDoc {
-  examLevel: "track";
-  track: Types.ObjectId;
+  category: Types.ObjectId;
+  track?: Types.ObjectId | null;
 }
 
 export interface ISubjectExamDoc extends IExamDoc {
   examLevel: "subject";
   subject: Types.ObjectId;
+  category?: Types.ObjectId | null;
 }
 
 export interface ITopicExamDoc extends IExamDoc {
   examLevel: "topic";
   subject: Types.ObjectId;
   topics: Types.ObjectId[];
+  category?: Types.ObjectId | null;
 }
