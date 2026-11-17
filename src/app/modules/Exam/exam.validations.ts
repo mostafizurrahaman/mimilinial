@@ -31,10 +31,6 @@ const createCategoryLevelExamSchema = z.object({
       description: optionalString("Description"),
       // Syllabus Hierarchy
       category: requiredMongooseId("Category"),
-      // track: requiredMongooseId("Track").optional().nullable(),
-      // subject: requiredMongooseId("Subject").optional().nullable(),
-      // topics: z.array(requiredMongooseId("Topic")).optional().default([]),
-
       // Generation Mode
       generationMode: enumString(
         generationModeValues,
@@ -139,11 +135,11 @@ const createCategoryLevelExamSchema = z.object({
           }
 
           const windowMins = (endMs - startMs) / (1000 * 60);
-          if (windowMins < data.durationMins) {
+          if (windowMins !== data.durationMins) {
             ctx.addIssue({
               code: "custom",
               path: ["durationMins"],
-              message: `Exam duration (${data.durationMins} mins) exceeds the live window (${windowMins} mins).`,
+              message: `For strict live exams, the time window (${windowMins} mins) must be exactly equal to the exam duration (${data.durationMins} mins).`,
             });
           }
         }
@@ -205,8 +201,6 @@ const updateExamSchema = z.object({
       examType: optionalEnumString(examTypeValues, "Exam type"),
       startTime: optionalDate("Start time"),
       endTime: optionalDate("End time"),
-
-      status: optionalEnumString(examStatusValues, "Status"),
     })
     .superRefine((data, ctx) => {
       if (data.startTime && data.endTime) {

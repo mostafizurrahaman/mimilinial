@@ -3,13 +3,13 @@ import { examServices } from "./exam.services";
 import { sendResponse, catchAsync } from "../../utils";
 
 // 1. CREATE EXAM
-const createExam = catchAsync(async (req, res) => {
+const CreateCategoryExam = catchAsync(async (req, res) => {
   const user = req.user;
-  const result = await examServices.createExam(user, req.body);
+  const result = await examServices.createCategoryExam(user, req.body);
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
-    message: "The exam created successfully!",
+    message: "The category level exam created successfully!",
     data: result,
   });
 });
@@ -65,7 +65,7 @@ const deleteExamById = catchAsync(async (req, res) => {
 });
 
 export const examControllers = {
-  createExam,
+  createExam: CreateCategoryExam,
   updateExam,
   getAllExam,
   getExamById,

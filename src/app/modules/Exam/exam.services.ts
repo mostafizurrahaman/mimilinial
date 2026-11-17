@@ -28,12 +28,15 @@ import { getArticle } from "@/app/utils/get-article";
 import { generateUniqueExamSlug } from "./exam.utils";
 import { Question, QUESTION_STATUS } from "../Questions";
 
-// 1. CREATE EXAM
-const createCategoryExam = async (user: IUserDoc, payload: TCreateCategoryLevelExamPayloadType) => {
+// 1. CREATE Category Exam:
+const createCategoryExam = async (
+  user: IUserDoc,
+  payload: TCreateCategoryLevelExamPayloadType,
+) => {
   const {
     title,
-    description,   
-    category,    
+    description,
+    category,
     generationMode,
     durationMins,
     totalQuestions,
@@ -49,51 +52,52 @@ const createCategoryExam = async (user: IUserDoc, payload: TCreateCategoryLevelE
     endTime,
   } = payload;
 
-  // 1 Check is category exists ?: 
-  const existingCategory  = await Category.findById(category)
+  // 1 Check is category exists ?:
+  const existingCategory = await Category.findById(category);
 
-  if (!existingCategory) { 
-    throw new NotFoundError("Category not found.")
+  if (!existingCategory) {
+    throw new NotFoundError("Category not found.");
   }
 
-  if (existingCategory.status !== categoryStatus.PUBLISHED) { 
-    throw new BadRequest(`You can not create exam under ${getArticle(existingCategory.status)} category.`)
+  if (existingCategory.status !== categoryStatus.PUBLISHED) {
+    throw new BadRequest(
+      `You can not create exam under ${getArticle(existingCategory.status)} category.`,
+    );
   }
 
   let finalQuestionMappings: Types.ObjectId[] = [];
-  // 2. Check generation mode and find out all the question and are they unique?: 
+  // 2. Check generation mode and find out all the question and are they unique?:
   if (generationMode === GENERATION_MODE.MANUAL) {
-
-    // 2.1: Question Map Length check: 
+    // 2.1: Question Map Length check:
     if (
       !questionMappings ||
       !Array.isArray(questionMappings) ||
       questionMappings.length !== totalQuestions
-    ) { 
+    ) {
       throw new BadRequest(
         `You must provide exactly ${totalQuestions} question mappings (received ${questionMappings?.length || 0}).`,
       );
     }
 
-    // 2.2: Question Map Existence check: 
+    // 2.2: Question Map Existence check:
     const validQuestionMappings = await QuestionMapping.find({
-      _id: { $in: questionMappings }, 
+      _id: { $in: questionMappings },
     });
 
     if (validQuestionMappings.length !== questionMappings.length) {
       throw new BadRequest("One or more question mappings do not exist.");
     }
 
-    // 2.3: Check all the question map is unique: 
+    // 2.3: Check all the question map is unique:
     const uniqueQuestionMapIds = [
       ...new Set(validQuestionMappings.map((qm) => qm._id.toString())),
     ];
 
     if (uniqueQuestionMapIds.length !== totalQuestions) {
       throw new BadRequest("Duplicate question mappings are not allowed.");
-    } 
+    }
 
-    // 2.4: Category Validation: 
+    // 2.4: Category Validation:
     const isAllBelongToSelectedCategory = validQuestionMappings.every(
       (qm) => qm.category.toString() === existingCategory._id.toString(),
     );
@@ -103,15 +107,15 @@ const createCategoryExam = async (user: IUserDoc, payload: TCreateCategoryLevelE
       );
     }
 
-    // 2.5: Check all underlying questions are unique: 
+    // 2.5: Check all underlying questions are unique:
     const allQuestionIds = [
       ...new Set(validQuestionMappings.map((qm) => qm.question.toString())),
-    ]; 
+    ];
     if (allQuestionIds.length !== totalQuestions) {
       throw new BadRequest("Duplicate questions are not allowed.");
     }
 
-    // 2.6: Question Status Check: 
+    // 2.6: Question Status Check:
     const allQuestions = await Question.find({
       _id: { $in: allQuestionIds },
       status: QUESTION_STATUS.PUBLISHED,
@@ -121,78 +125,71 @@ const createCategoryExam = async (user: IUserDoc, payload: TCreateCategoryLevelE
       throw new BadRequest(
         "Only published questions are allowed to create an exam.",
       );
-    } 
+    }
 
     finalQuestionMappings = uniqueQuestionMapIds.map(
       (id) => new Types.ObjectId(id),
-    ); 
-  
-  } else  if (generationMode === GENERATION_MODE.RANDOM) {
-
+    );
+  } else if (generationMode === GENERATION_MODE.RANDOM) {
     const automaticMappedQuestions = await QuestionMapping.aggregate([
       {
         $match: {
           category: existingCategory?._id,
-        }
-      }, 
+        },
+      },
       {
         $lookup: {
           from: "questions",
           localField: "question",
           foreignField: "_id",
           as: "questionDetails",
-          pipeline: [
-            { $match: { status: QUESTION_STATUS.PUBLISHED } }
-          ]
-        }
-      }, 
+          pipeline: [{ $match: { status: QUESTION_STATUS.PUBLISHED } }],
+        },
+      },
       {
-        $unwind: { 
-          path: "$questionDetails", 
-          preserveNullAndEmptyArrays: false
-        }
-      }, 
-      { 
-        $group: { 
+        $unwind: {
+          path: "$questionDetails",
+          preserveNullAndEmptyArrays: false,
+        },
+      },
+      {
+        $group: {
           _id: "$question",
-          mappingId: {$first: "$_id"}
-        }
-      }, 
+          mappingId: { $first: "$_id" },
+        },
+      },
       {
-        $sample: {size: totalQuestions }
-      }, 
+        $sample: { size: totalQuestions },
+      },
       {
         $project: {
           _id: 0,
-          mappingId: 1
-        }
-      }      
-    ])
+          mappingId: 1,
+        },
+      },
+    ]);
 
     if (!automaticMappedQuestions.length) {
-      throw new BadRequest("No questions found matching the criteria.")
+      throw new BadRequest("No questions found matching the criteria.");
     }
 
-    if (automaticMappedQuestions?.length < totalQuestions ) {
-      throw new BadRequest(`Only ${automaticMappedQuestions?.length} questions available for the selected criteria. Cannot generate an exam with ${totalQuestions} questions.`)
+    if (automaticMappedQuestions?.length < totalQuestions) {
+      throw new BadRequest(
+        `Only ${automaticMappedQuestions?.length} questions available for the selected criteria. Cannot generate an exam with ${totalQuestions} questions.`,
+      );
     }
 
-
-
-    finalQuestionMappings = automaticMappedQuestions.map((item) => item.mappingId)      
-
-
+    finalQuestionMappings = automaticMappedQuestions.map(
+      (item) => item.mappingId,
+    );
   }
 
-
-
   // 3. Compute Total Marks
-  const totalMarks =
-    Math.round(totalQuestions * marksPerQuestion * 100) / 100;
+  const totalMarks = Math.round(totalQuestions * marksPerQuestion * 100) / 100;
 
   // 4. Generate Unique Slug
-  const uniqueSlug = await generateUniqueExamSlug(title); 
-  
+  const uniqueSlug = await generateUniqueExamSlug(title);
+
   // 1.5 Sanitize Practice Exam Scheduling Fields
   const isPractice = examType === EXAM_TYPE.MODEL_TEST;
   const sanitizedStartTime = isPractice ? null : startTime;
@@ -222,8 +219,7 @@ const createCategoryExam = async (user: IUserDoc, payload: TCreateCategoryLevelE
     author: user._id,
   });
 
-  return newExam
-  
+  return newExam;
 };
 
 // 2. UPDATE EXAM (Hierarchy is strictly immutable)
@@ -232,60 +228,164 @@ const updateExam = async (
   id: string,
   payload: TUpdateExamPayloadType,
 ) => {
+  const {
+    // Meta
+    title,
+    description,
+
+    // Duration & Timing
+    durationMins,
+    startTime,
+    endTime,
+
+    // Marks
+    marksPerQuestion,
+    negativeMarks,
+    passMarks,
+
+    // Exam Type
+    examType,
+
+    // Configurations
+    isOptionShuffled,
+    isRandomized,
+    isSpeedTest,
+  } = payload;
+
+  // 1. Check if exam exists:
   const existingExam = await Exam.findById(id);
   if (!existingExam) {
     throw new NotFoundError("Exam not found.");
   }
 
-  // TODO: When ExamAttempt module is wired, check if student attempts exist:
-  // const hasAttempts = await ExamAttempt.exists({ exam: id });
-  // if (hasAttempts) disallow changing marks, questions, or duration.
-
-  // Update slug if title changed
-  if (payload.title && payload.title !== existingExam.title) {
-    existingExam.title = payload.title;
-    existingExam.slug = await generateUniqueSlug(payload.title);
+  // 2. Disallow updating archived exams:
+  if (existingExam.status === EXAM_STATUS.ARCHIVED) {
+    throw new BadRequest("You cannot update an archived exam.");
   }
 
-  if (payload.description !== undefined) {
-    existingExam.description = payload.description;
+  // TODO: Check if any student attempts exist when ExamAttempt module is wired:
+  // const hasExamAttempts = await ExamAttempt.exists({ exam: id });
+  // if (hasExamAttempts) {
+  //   throw new BadRequest("Cannot modify core exam settings once student attempts exist.");
+  // }
+
+  // 3. Title & Slug Update:
+  if (title !== undefined && title !== existingExam.title) {
+    existingExam.title = title;
+    existingExam.slug = await generateUniqueExamSlug(title);
   }
-  if (payload.durationMins !== undefined) {
-    existingExam.durationMins = payload.durationMins;
+
+  // 4. Description Update:
+  if (description !== undefined) {
+    existingExam.description = description || null;
   }
-  if (payload.marksPerQuestion !== undefined) {
-    existingExam.marksPerQuestion = payload.marksPerQuestion;
-    existingExam.totalMarks =
-      Math.round(
-        existingExam.totalQuestions * payload.marksPerQuestion * 100,
-      ) / 100;
+
+  // 5. Exam Type & Timing (Live, Model Test, Archive)
+  const effectiveExamType =
+    examType !== undefined ? examType : existingExam.examType;
+  const effectiveDurationMins =
+    durationMins !== undefined ? durationMins : existingExam.durationMins;
+  const effectiveStartTime =
+    startTime !== undefined ? startTime : existingExam.startTime;
+  const effectiveEndTime =
+    endTime !== undefined ? endTime : existingExam.endTime;
+
+  // Disallow converting an archived exam back to live
+  if (
+    existingExam.examType === EXAM_TYPE.ARCHIVE &&
+    effectiveExamType === EXAM_TYPE.LIVE
+  ) {
+    throw new BadRequest(
+      "Cannot convert an archived exam back to a live exam.",
+    );
   }
-  if (payload.negativeMarks !== undefined) {
-    existingExam.negativeMarks = payload.negativeMarks;
+
+  if (effectiveExamType === EXAM_TYPE.LIVE) {
+    if (!effectiveStartTime || !effectiveEndTime) {
+      throw new BadRequest(
+        "Start time and end time are required for live exams.",
+      );
+    }
+
+    const startMs = new Date(effectiveStartTime).getTime();
+    const endMs = new Date(effectiveEndTime).getTime();
+
+    // If startTime is updated or exam is newly converted to live, ensure start time is in the future
+    if (
+      (startTime !== undefined || existingExam.examType !== EXAM_TYPE.LIVE) &&
+      startMs < Date.now()
+    ) {
+      throw new BadRequest("Start time cannot be in the past for live exams.");
+    }
+
+    if (startMs >= endMs) {
+      throw new BadRequest("End time must be after start time.");
+    }
+
+    const windowMins = (endMs - startMs) / (1000 * 60);
+    if (windowMins !== effectiveDurationMins) {
+      throw new BadRequest(
+        `For strict live exams, the time window (${windowMins} mins) must be exactly equal to the exam duration (${effectiveDurationMins} mins).`,
+      );
+    }
+
+    existingExam.examType = EXAM_TYPE.LIVE;
+    existingExam.startTime = new Date(effectiveStartTime);
+    existingExam.endTime = new Date(effectiveEndTime);
+  } else if (effectiveExamType === EXAM_TYPE.MODEL_TEST) {
+    existingExam.examType = EXAM_TYPE.MODEL_TEST;
+    existingExam.startTime = null;
+    existingExam.endTime = null;
+  } else if (effectiveExamType === EXAM_TYPE.ARCHIVE) {
+    existingExam.examType = EXAM_TYPE.ARCHIVE;
+    // Retain historical start and end times if available
   }
-  if (payload.passMarks !== undefined) {
-    existingExam.passMarks = payload.passMarks;
+
+  existingExam.durationMins = effectiveDurationMins;
+
+  // 6. Marks Validation & Synchronization (Merging Previous & New Data)
+  const effectiveMarksPerQuestion =
+    marksPerQuestion !== undefined
+      ? marksPerQuestion
+      : existingExam.marksPerQuestion;
+  const effectiveNegativeMarks =
+    negativeMarks !== undefined ? negativeMarks : existingExam.negativeMarks;
+  const effectivePassMarks =
+    passMarks !== undefined ? passMarks : existingExam.passMarks;
+
+  // Total marks auto-calculated using immutable totalQuestions and effective marksPerQuestion
+  const calculatedTotalMarks =
+    Math.round(existingExam.totalQuestions * effectiveMarksPerQuestion * 100) /
+    100;
+
+  // Negative marks must be strictly less than marks per question
+  if (effectiveNegativeMarks >= effectiveMarksPerQuestion) {
+    throw new BadRequest(
+      `Negative marks (${effectiveNegativeMarks}) must be less than marks per question (${effectiveMarksPerQuestion}).`,
+    );
   }
-  if (payload.isRandomized !== undefined) {
-    existingExam.isRandomized = payload.isRandomized;
+
+  // Pass marks cannot exceed the calculated total marks
+  if (effectivePassMarks > calculatedTotalMarks) {
+    throw new BadRequest(
+      `Pass marks (${effectivePassMarks}) cannot exceed the total marks (${calculatedTotalMarks}).`,
+    );
   }
-  if (payload.isOptionShuffled !== undefined) {
-    existingExam.isOptionShuffled = payload.isOptionShuffled;
+
+  existingExam.marksPerQuestion = effectiveMarksPerQuestion;
+  existingExam.negativeMarks = effectiveNegativeMarks;
+  existingExam.totalMarks = calculatedTotalMarks;
+  existingExam.passMarks = effectivePassMarks;
+
+  // 7. Configurations
+  if (isOptionShuffled !== undefined) {
+    existingExam.isOptionShuffled = isOptionShuffled;
   }
-  if (payload.isSpeedTest !== undefined) {
-    existingExam.isSpeedTest = payload.isSpeedTest;
+  if (isRandomized !== undefined) {
+    existingExam.isRandomized = isRandomized;
   }
-  if (payload.examType !== undefined) {
-    existingExam.examType = payload.examType;
-  }
-  if (payload.startTime !== undefined) {
-    existingExam.startTime = payload.startTime;
-  }
-  if (payload.endTime !== undefined) {
-    existingExam.endTime = payload.endTime;
-  }
-  if (payload.status !== undefined) {
-    existingExam.status = payload.status;
+  if (isSpeedTest !== undefined) {
+    existingExam.isSpeedTest = isSpeedTest;
   }
 
   existingExam.editor = user._id;
@@ -296,16 +396,8 @@ const updateExam = async (
 
 // 3. GET ALL EXAMS
 const getAllExam = async (query: TGetAllExamQueryParamsType) => {
-  const {
-    page,
-    limit,
-    skip,
-    searchTerm,
-    sortOrder,
-    sortBy,
-    fromDate,
-    toDate,
-  } = formatQuery(query, examSortableFields);
+  const { page, limit, skip, searchTerm, sortOrder, sortBy, fromDate, toDate } =
+    formatQuery(query, examSortableFields);
 
   const { examLevel, examType, status, category, subject } = query;
 
@@ -456,7 +548,7 @@ const deleteExamById = async (id: string) => {
 };
 
 export const examServices = {
-  createExam: createCategoryExam,
+  createCategoryExam,
   updateExam,
   getAllExam,
   getExamById,
