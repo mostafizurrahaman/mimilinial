@@ -27,6 +27,7 @@ import { EXAM_STATUS, PastExam } from "../PastExam";
 import { QuestionVersion } from "../QuestionVersion";
 import mongoose from "mongoose";
 import { formatQuery } from "@/app/utils";
+import { Exam } from "../Exam";
 
 // 1. CREATE QUESTION MAPPING
 const createQuestionMapping = async (
@@ -129,8 +130,7 @@ const createQuestionMapping = async (
     }
 
     if (
-      existingTrack.category?.toString() !==
-      existingCategory?._id?.toString()
+      existingTrack.category?.toString() !== existingCategory?._id?.toString()
     ) {
       throw new BadRequest(
         `The selected track does not belong to the selected category.`,
@@ -343,14 +343,14 @@ const updateQuestionMapping = async (
       payload.category.toString() !== existingMapping.category.toString()) ||
     (payload.track !== undefined &&
       (payload.track?.toString() ?? null) !==
-      (existingMapping.track?.toString() ?? null)) ||
+        (existingMapping.track?.toString() ?? null)) ||
     (payload.subject !== undefined &&
       payload.subject.toString() !== existingMapping.subject.toString()) ||
     (payload.topic !== undefined &&
       payload.topic.toString() !== existingMapping.topic.toString()) ||
     (payload.pastExam !== undefined &&
       (payload.pastExam?.toString() ?? null) !==
-      (existingMapping.pastExam?.toString() ?? null));
+        (existingMapping.pastExam?.toString() ?? null));
 
   // If hierarchy did NOT change, only update non-hierarchy fields (marks, sortOrder, year)
   if (!isHierarchyChanged) {
@@ -481,8 +481,7 @@ const updateQuestionMapping = async (
       );
     }
     if (
-      effectiveTrack.category?.toString() !==
-      effectiveCategory._id.toString()
+      effectiveTrack.category?.toString() !== effectiveCategory._id.toString()
     ) {
       throw new BadRequest(
         "The selected track does not belong to the selected category.",
@@ -673,19 +672,10 @@ const getAllQuestionMapping = async (
     includeInActiveQuestion,
   } = query;
 
+  console.log(type);
 
-  console.log(type)
-
-  const {
-    page,
-    limit,
-    skip,
-    searchTerm,
-    sortOrder,
-    sortBy,
-    fromDate,
-    toDate,
-  } = formatQuery(query, questionMappingSortableFields);
+  const { page, limit, skip, searchTerm, sortOrder, sortBy, fromDate, toDate } =
+    formatQuery(query, questionMappingSortableFields);
 
   const pipeline: PipelineStage[] = [];
 
@@ -796,8 +786,7 @@ const getAllQuestionMapping = async (
   }
 
   if (difficulty && Array.isArray(difficulty) && difficulty?.length > 0) {
-    questionClassificationMatchingStage.$match["questionDetails.difficulty"] =
-    {
+    questionClassificationMatchingStage.$match["questionDetails.difficulty"] = {
       $in: difficulty,
     };
   }
@@ -835,11 +824,16 @@ const getAllQuestionMapping = async (
     },
   );
 
-
   if (searchTerm) {
     pipeline.push({
       $match: {
-        $or: ["questionDetails.code", "questionDetails.slug", 'currentVersion.plainStem', 'currentVersion.stem', "year"].map((field) => ({
+        $or: [
+          "questionDetails.code",
+          "questionDetails.slug",
+          "currentVersion.plainStem",
+          "currentVersion.stem",
+          "year",
+        ].map((field) => ({
           [field]: { $regex: searchTerm, $options: "i" },
         })),
       },
@@ -958,9 +952,7 @@ const getAllQuestionMapping = async (
         localField: "topic",
         foreignField: "_id",
         as: "topicDetails",
-        pipeline: [
-          { $project: { nameBn: 1, nameEn: 1, slug: 1, status: 1 } },
-        ],
+        pipeline: [{ $project: { nameBn: 1, nameEn: 1, slug: 1, status: 1 } }],
       },
     },
     {
@@ -993,111 +985,92 @@ const getAllQuestionMapping = async (
     },
   );
 
-
   if (!includeInActiveQuestion) {
-    const conditions = [
-      {
-        "questionDetails.status": 
-          $eq: QUESTION_STATUS.PUBLISHED,
-        
-      
-        "collectionDetails.status": ,
-      },
-      {
-        "categoryDetails.status": {
-          $eq: categoryStatus.PUBLISHED,
-        },
-      },
-      {
-        "subjectDetails.status": {
-          $eq: SUBJECT_STATUS.PUBLISHED,
-        },
-      },
-      {
-        "topicDetails.status": {
-          $eq: TOPIC_STATUS.PUBLISHED,
-        },
-      },
-      {
-        track: { $ne: null },
-        "trackDetails.status": { $eq: trackStatus.PUBLISHED },
-      },
-
-      {
-        pastExam: { $ne: null },
-        "pastExamDetails.status": { $eq: EXAM_STATUS.PUBLISHED },
-      },
-    ];
-
     pipeline.push({
       $match: {
-        $or: conditions
-      }
-    })
-
+        "questionDetails.status": QUESTION_STATUS.PUBLISHED,
+        "collectionDetails.status": COLLECTION_STATUS.PUBLISHED,
+        "categoryDetails.status": categoryStatus.PUBLISHED,
+        "subjectDetails.status": SUBJECT_STATUS.PUBLISHED,
+        "topicDetails.status": TOPIC_STATUS.PUBLISHED,
+        $and: [
+          {
+            $or: [
+              { track: null },
+              { "trackDetails.status": trackStatus.PUBLISHED },
+            ],
+          },
+          {
+            $or: [
+              { pastExam: null },
+              { "pastExamDetails.status": EXAM_STATUS.PUBLISHED },
+            ],
+          },
+        ],
+      },
+    });
   }
-
 
   pipeline.push({
     $project: {
       _id: 0,
       mappingId: "$_id",
-      marks: '$marks',
+      marks: "$marks",
       sortOrder: 1,
       year: "$year",
       createdAt: "$createdAt",
 
-      // collection Details: 
+      // collection Details:
       collection: {
         collectionId: "$collectionDetails._id",
-        nameEn: '$collectionDetails.nameEn',
-        nameBn: '$collectionDetails.nameBn',
-        slug: '$collectionDetails.slug',
-        status: '$collectionDetails.status',
+        nameEn: "$collectionDetails.nameEn",
+        nameBn: "$collectionDetails.nameBn",
+        slug: "$collectionDetails.slug",
+        status: "$collectionDetails.status",
       },
 
       // category details
       category: {
         categoryId: "$categoryDetails._id",
-        nameEn: '$categoryDetails.nameEn',
-        nameBn: '$categoryDetails.nameBn',
-        slug: '$categoryDetails.slug',
-        status: '$categoryDetails.status',
+        nameEn: "$categoryDetails.nameEn",
+        nameBn: "$categoryDetails.nameBn",
+        slug: "$categoryDetails.slug",
+        status: "$categoryDetails.status",
       },
 
       track: {
         trackId: { $ifNull: ["$trackDetails._id", null] },
-        nameEn: { $ifNull: ['$trackDetails.nameEn', null] },
-        nameBn: { $ifNull: ['$trackDetails.nameBn', null] },
-        slug: { $ifNull: ['$trackDetails.slug', null] },
-        status: { $ifNull: ['$trackDetails.status', null] },
+        nameEn: { $ifNull: ["$trackDetails.nameEn", null] },
+        nameBn: { $ifNull: ["$trackDetails.nameBn", null] },
+        slug: { $ifNull: ["$trackDetails.slug", null] },
+        status: { $ifNull: ["$trackDetails.status", null] },
       },
 
       subject: {
         subjectId: { $ifNull: ["$subjectDetails._id", null] },
-        nameEn: { $ifNull: ['$subjectDetails.nameEn', null] },
-        nameBn: { $ifNull: ['$subjectDetails.nameBn', null] },
-        code: { $ifNull: ['$subjectDetails.code', null] },
-        colorCode: { $ifNull: ['$subjectDetails.colorCode', null] },
-        status: { $ifNull: ['$subjectDetails.status', null] },
-        slug: { $ifNull: ['$subjectDetails.slug', null] },
+        nameEn: { $ifNull: ["$subjectDetails.nameEn", null] },
+        nameBn: { $ifNull: ["$subjectDetails.nameBn", null] },
+        code: { $ifNull: ["$subjectDetails.code", null] },
+        colorCode: { $ifNull: ["$subjectDetails.colorCode", null] },
+        status: { $ifNull: ["$subjectDetails.status", null] },
+        slug: { $ifNull: ["$subjectDetails.slug", null] },
       },
 
       topic: {
         topicId: { $ifNull: ["$topicDetails._id", null] },
-        nameEn: { $ifNull: ['$topicDetails.nameEn', null] },
-        nameBn: { $ifNull: ['$topicDetails.nameBn', null] },
-        slug: { $ifNull: ['$topicDetails.slug', null] },
-        status: { $ifNull: ['$topicDetails.status', null] },
+        nameEn: { $ifNull: ["$topicDetails.nameEn", null] },
+        nameBn: { $ifNull: ["$topicDetails.nameBn", null] },
+        slug: { $ifNull: ["$topicDetails.slug", null] },
+        status: { $ifNull: ["$topicDetails.status", null] },
       },
 
       pastExam: {
         pastExamId: { $ifNull: ["$pastExamDetails._id", null] },
-        nameEn: { $ifNull: ['$pastExamDetails.nameEn', null] },
-        nameBn: { $ifNull: ['$pastExamDetails.nameBn', null] },
-        year: { $ifNull: ['$pastExamDetails.year', null] },
-        slug: { $ifNull: ['$pastExamDetails.slug', null] },
-        status: { $ifNull: ['$pastExamDetails.status', null] },
+        nameEn: { $ifNull: ["$pastExamDetails.nameEn", null] },
+        nameBn: { $ifNull: ["$pastExamDetails.nameBn", null] },
+        year: { $ifNull: ["$pastExamDetails.year", null] },
+        slug: { $ifNull: ["$pastExamDetails.slug", null] },
+        status: { $ifNull: ["$pastExamDetails.status", null] },
       },
 
       question: {
@@ -1140,16 +1113,19 @@ const getAllQuestionMapping = async (
         },
         options: {
           $cond: [
-            { $in: ["$questionDetails.type", ["true_false", "single_mcq", "multi_mcq"]] },
+            {
+              $in: [
+                "$questionDetails.type",
+                ["true_false", "single_mcq", "multi_mcq"],
+              ],
+            },
             "$currentVersion.options",
             "$$REMOVE",
           ],
-        }
+        },
       },
-    }
-  })
-
-
+    },
+  });
 
   pipeline.push({ $sort: { [sortBy]: sortOrder } });
 
@@ -1164,8 +1140,6 @@ const getAllQuestionMapping = async (
 
   const data = aggregated?.[0]?.data || [];
   const total = aggregated?.[0]?.meta?.[0]?.total || 0;
-
-
 
   return {
     data,
@@ -1327,9 +1301,7 @@ const getQuestionMappingById = async (id: string) => {
         localField: "topic",
         foreignField: "_id",
         as: "topicDetails",
-        pipeline: [
-          { $project: { nameBn: 1, nameEn: 1, slug: 1, status: 1 } },
-        ],
+        pipeline: [{ $project: { nameBn: 1, nameEn: 1, slug: 1, status: 1 } }],
       },
     },
     {
@@ -1493,9 +1465,15 @@ const deleteQuestionMappingById = async (id: string) => {
     throw new NotFoundError("Question mapping not found.");
   }
 
-  // TODO: ভবিষ্যতে Exam মডিউল আসলে চেক করবেন:
-  // const isUsedInExam = await Exam.exists({ "questions.mappingId": id });
-  // if (isUsedInExam) throw new BadRequest("Cannot delete: used in exams.");
+  // Check is question mapped with an exam?:
+  const isUsedInExam = await Exam.exists({
+    questionMappings: existingMapping._id,
+  });
+  if (isUsedInExam) {
+    throw new BadRequest(
+      "Cannot delete this question mapping because it is currently used in one or more exams.",
+    );
+  }
 
   const mongoSession = await mongoose.startSession();
 

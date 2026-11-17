@@ -20,29 +20,26 @@ import {
   EXAM_TYPE,
   GENERATION_MODE,
 } from "./exam.constants";
+
 import { sortOrderValues } from "../../constants";
 
 // 1. CREATE EXAM SCHEMA
-const createExamSchema = z.object({
+const createCategoryLevelExamSchema = z.object({
   body: z
     .object({
       title: requiredString("Title"),
-      slug: optionalString("Slug"),
       description: optionalString("Description"),
-
-      // Exam Level: "category" | "subject" | "topic"
-      examLevel: enumString(examLevelValues, "Exam level"),
-
       // Syllabus Hierarchy
-      category: requiredMongooseId("Category").optional().nullable(),
-      track: requiredMongooseId("Track").optional().nullable(),
-      subject: requiredMongooseId("Subject").optional().nullable(),
-      topics: z.array(requiredMongooseId("Topic")).optional().default([]),
+      category: requiredMongooseId("Category"),
+      // track: requiredMongooseId("Track").optional().nullable(),
+      // subject: requiredMongooseId("Subject").optional().nullable(),
+      // topics: z.array(requiredMongooseId("Topic")).optional().default([]),
 
       // Generation Mode
-      generationMode: enumString(generationModeValues, "Generation mode").default(
-        GENERATION_MODE.MANUAL,
-      ),
+      generationMode: enumString(
+        generationModeValues,
+        "Generation mode",
+      ).default(GENERATION_MODE.MANUAL),
 
       // Time and Marks Settings
       durationMins: requiredNumber("Duration minutes").min(
@@ -70,11 +67,15 @@ const createExamSchema = z.object({
         .default([]),
 
       // Configurations
-      isRandomized: requiredStrBoolean("Is randomized").optional().default(true),
+      isRandomized: requiredStrBoolean("Is randomized")
+        .optional()
+        .default(true),
       isOptionShuffled: requiredStrBoolean("Is option shuffled")
         .optional()
         .default(true),
-      isSpeedTest: requiredStrBoolean("Is speed test").optional().default(false),
+      isSpeedTest: requiredStrBoolean("Is speed test")
+        .optional()
+        .default(false),
 
       // Scheduling & Type
       examType: enumString(examTypeValues, "Exam type").default(
@@ -82,49 +83,8 @@ const createExamSchema = z.object({
       ),
       startTime: optionalDate("Start time"),
       endTime: optionalDate("End time"),
-
-      // Status
-      status: optionalEnumString(examStatusValues, "Status"),
     })
     .superRefine((data, ctx) => {
-      // 1. Hierarchy Validation by Exam Level
-      if (data.examLevel === EXAM_LEVEL.CATEGORY) {
-        if (!data.category) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["category"],
-            message: "Category is required for category-level exams.",
-          });
-        }
-      }
-
-      if (data.examLevel === EXAM_LEVEL.SUBJECT) {
-        if (!data.subject) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["subject"],
-            message: "Subject is required for subject-level exams.",
-          });
-        }
-      }
-
-      if (data.examLevel === EXAM_LEVEL.TOPIC) {
-        if (!data.subject) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["subject"],
-            message: "Subject is required for topic-level exams.",
-          });
-        }
-        if (!data.topics || data.topics.length === 0) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["topics"],
-            message: "At least one topic must be selected for topic-level exams.",
-          });
-        }
-      }
-
       // 2. Marks and Negative Marks Logical Consistency
       const calculatedTotalMarks = data.totalQuestions * data.marksPerQuestion;
       if (data.passMarks > calculatedTotalMarks) {
@@ -163,6 +123,13 @@ const createExamSchema = z.object({
           const startMs = new Date(data.startTime).getTime();
           const endMs = new Date(data.endTime).getTime();
 
+          if (startMs < Date.now()) {
+            ctx.addIssue({
+              code: "custom",
+              path: ["startTime"],
+              message: "Start time cannot be in the past for live exams.",
+            });
+          }
           if (startMs >= endMs) {
             ctx.addIssue({
               code: "custom",
@@ -182,13 +149,29 @@ const createExamSchema = z.object({
         }
       }
 
-      // 4. Duplicate Question Check for Manual Mode
+      // 4. Check question count for manual generation mode:
+      if (data.generationMode === GENERATION_MODE.MANUAL) {
+        if (
+          !data.questionMappings ||
+          data.questionMappings.length !== data.totalQuestions
+        ) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["questionMappings"],
+            message: `You must provide exactly ${data.totalQuestions} question mappings (received ${data.questionMappings?.length || 0}).`,
+          });
+        }
+      }
+
+      // 5. Duplicate Question Check for Manual Mode
       if (
         data.generationMode === GENERATION_MODE.MANUAL &&
         data.questionMappings &&
         data.questionMappings.length > 0
       ) {
-        const uniqueSet = new Set(data.questionMappings.map((id) => id.toString()));
+        const uniqueSet = new Set(
+          data.questionMappings.map((id) => id.toString()),
+        );
         if (uniqueSet.size !== data.questionMappings.length) {
           ctx.addIssue({
             code: "custom",
@@ -275,15 +258,15 @@ const deleteExamByIdSchema = z.object({
 });
 
 export const examValidations = {
-  createExamSchema,
+  createExamSchema: createCategoryLevelExamSchema,
   updateExamSchema,
   getAllExamSchema,
   getExamByIdSchema,
   deleteExamByIdSchema,
 };
 
-export type TCreateExamPayloadType = z.infer<
-  typeof createExamSchema.shape.body
+export type TCreateCategoryLevelExamPayloadType = z.infer<
+  typeof createCategoryLevelExamSchema.shape.body
 >;
 export type TUpdateExamPayloadType = z.infer<
   typeof updateExamSchema.shape.body

@@ -1,7 +1,7 @@
 import httpStatus from "http-status";
 import mongoose, { type PipelineStage, Types } from "mongoose";
 import type {
-  TCreateExamPayloadType,
+  TCreateCategoryLevelExamPayloadType,
   TUpdateExamPayloadType,
   TGetAllExamQueryParamsType,
 } from "./exam.validations";
@@ -21,38 +21,19 @@ import {
   GENERATION_MODE,
 } from "./exam.constants";
 import { Category, categoryStatus } from "../Category";
-import { Track, trackStatus } from "../Track";
-import { Subject, SUBJECT_STATUS } from "../Subject";
-import { Topic, TOPIC_STATUS } from "../Topic";
 import { QuestionMapping } from "../QuestionMapping";
 import type { IUserDoc } from "../User";
 import { formatQuery, generateSlug } from "@/app/utils";
-
-// Helper: Ensure unique slug
-const generateUniqueSlug = async (title: string, baseSlug?: string | null) => {
-  const initialSlug = baseSlug || generateSlug(title);
-  let slug = initialSlug;
-  let counter = 1;
-
-  while (await Exam.exists({ slug })) {
-    slug = `${initialSlug}-${counter}`;
-    counter++;
-  }
-
-  return slug;
-};
+import { getArticle } from "@/app/utils/get-article";
+import { generateUniqueExamSlug } from "./exam.utils";
+import { Question, QUESTION_STATUS } from "../Questions";
 
 // 1. CREATE EXAM
-const createExam = async (user: IUserDoc, payload: TCreateExamPayloadType) => {
+const createCategoryExam = async (user: IUserDoc, payload: TCreateCategoryLevelExamPayloadType) => {
   const {
     title,
-    slug: providedSlug,
-    description,
-    examLevel,
-    category,
-    track,
-    subject,
-    topics,
+    description,   
+    category,    
     generationMode,
     durationMins,
     totalQuestions,
@@ -66,153 +47,163 @@ const createExam = async (user: IUserDoc, payload: TCreateExamPayloadType) => {
     examType,
     startTime,
     endTime,
-    status = EXAM_STATUS.DRAFT,
   } = payload;
 
-  // 1.1 Compute Total Marks
+  // 1 Check is category exists ?: 
+  const existingCategory  = await Category.findById(category)
+
+  if (!existingCategory) { 
+    throw new NotFoundError("Category not found.")
+  }
+
+  if (existingCategory.status !== categoryStatus.PUBLISHED) { 
+    throw new BadRequest(`You can not create exam under ${getArticle(existingCategory.status)} category.`)
+  }
+
+  let finalQuestionMappings: Types.ObjectId[] = [];
+  // 2. Check generation mode and find out all the question and are they unique?: 
+  if (generationMode === GENERATION_MODE.MANUAL) {
+
+    // 2.1: Question Map Length check: 
+    if (
+      !questionMappings ||
+      !Array.isArray(questionMappings) ||
+      questionMappings.length !== totalQuestions
+    ) { 
+      throw new BadRequest(
+        `You must provide exactly ${totalQuestions} question mappings (received ${questionMappings?.length || 0}).`,
+      );
+    }
+
+    // 2.2: Question Map Existence check: 
+    const validQuestionMappings = await QuestionMapping.find({
+      _id: { $in: questionMappings }, 
+    });
+
+    if (validQuestionMappings.length !== questionMappings.length) {
+      throw new BadRequest("One or more question mappings do not exist.");
+    }
+
+    // 2.3: Check all the question map is unique: 
+    const uniqueQuestionMapIds = [
+      ...new Set(validQuestionMappings.map((qm) => qm._id.toString())),
+    ];
+
+    if (uniqueQuestionMapIds.length !== totalQuestions) {
+      throw new BadRequest("Duplicate question mappings are not allowed.");
+    } 
+
+    // 2.4: Category Validation: 
+    const isAllBelongToSelectedCategory = validQuestionMappings.every(
+      (qm) => qm.category.toString() === existingCategory._id.toString(),
+    );
+    if (!isAllBelongToSelectedCategory) {
+      throw new BadRequest(
+        "All question mappings must belong to the selected category.",
+      );
+    }
+
+    // 2.5: Check all underlying questions are unique: 
+    const allQuestionIds = [
+      ...new Set(validQuestionMappings.map((qm) => qm.question.toString())),
+    ]; 
+    if (allQuestionIds.length !== totalQuestions) {
+      throw new BadRequest("Duplicate questions are not allowed.");
+    }
+
+    // 2.6: Question Status Check: 
+    const allQuestions = await Question.find({
+      _id: { $in: allQuestionIds },
+      status: QUESTION_STATUS.PUBLISHED,
+    }).select("status");
+
+    if (allQuestions.length !== totalQuestions) {
+      throw new BadRequest(
+        "Only published questions are allowed to create an exam.",
+      );
+    } 
+
+    finalQuestionMappings = uniqueQuestionMapIds.map(
+      (id) => new Types.ObjectId(id),
+    ); 
+  
+  } else  if (generationMode === GENERATION_MODE.RANDOM) {
+
+    const automaticMappedQuestions = await QuestionMapping.aggregate([
+      {
+        $match: {
+          category: existingCategory?._id,
+        }
+      }, 
+      {
+        $lookup: {
+          from: "questions",
+          localField: "question",
+          foreignField: "_id",
+          as: "questionDetails",
+          pipeline: [
+            { $match: { status: QUESTION_STATUS.PUBLISHED } }
+          ]
+        }
+      }, 
+      {
+        $unwind: { 
+          path: "$questionDetails", 
+          preserveNullAndEmptyArrays: false
+        }
+      }, 
+      { 
+        $group: { 
+          _id: "$question",
+          mappingId: {$first: "$_id"}
+        }
+      }, 
+      {
+        $sample: {size: totalQuestions }
+      }, 
+      {
+        $project: {
+          _id: 0,
+          mappingId: 1
+        }
+      }      
+    ])
+
+    if (!automaticMappedQuestions.length) {
+      throw new BadRequest("No questions found matching the criteria.")
+    }
+
+    if (automaticMappedQuestions?.length < totalQuestions ) {
+      throw new BadRequest(`Only ${automaticMappedQuestions?.length} questions available for the selected criteria. Cannot generate an exam with ${totalQuestions} questions.`)
+    }
+
+
+
+    finalQuestionMappings = automaticMappedQuestions.map((item) => item.mappingId)      
+
+
+  }
+
+
+
+  // 3. Compute Total Marks
   const totalMarks =
     Math.round(totalQuestions * marksPerQuestion * 100) / 100;
 
-  // 1.2 Generate Unique Slug
-  const uniqueSlug = await generateUniqueSlug(title, providedSlug);
-
-  // 1.3 Validate Hierarchy Integrity
-  let categoryDoc = null;
-  if (category) {
-    categoryDoc = await Category.findById(category);
-    if (!categoryDoc) {
-      throw new NotFoundError("Selected category not found.");
-    }
-    if (categoryDoc.status !== categoryStatus.PUBLISHED) {
-      throw new BadRequest(
-        `Cannot create exam under an unpublished category (${categoryDoc.status}).`,
-      );
-    }
-  }
-
-  let trackDoc = null;
-  if (track) {
-    trackDoc = await Track.findById(track);
-    if (!trackDoc) {
-      throw new NotFoundError("Selected track not found.");
-    }
-    if (trackDoc.status !== trackStatus.PUBLISHED) {
-      throw new BadRequest(
-        `Cannot create exam under an unpublished track (${trackDoc.status}).`,
-      );
-    }
-    if (
-      !category ||
-      trackDoc.category.toString() !== categoryDoc?._id.toString()
-    ) {
-      throw new BadRequest(
-        "The selected track does not belong to the selected category.",
-      );
-    }
-  }
-
-  let subjectDoc = null;
-  if (subject) {
-    subjectDoc = await Subject.findById(subject);
-    if (!subjectDoc) {
-      throw new NotFoundError("Selected subject not found.");
-    }
-    if (subjectDoc.status !== SUBJECT_STATUS.PUBLISHED) {
-      throw new BadRequest(
-        `Cannot create exam under an unpublished subject (${subjectDoc.status}).`,
-      );
-    }
-  }
-
-  if (topics && topics.length > 0) {
-    const topicDocs = await Topic.find({
-      _id: { $in: topics },
-      status: TOPIC_STATUS.PUBLISHED,
-    });
-
-    if (topicDocs.length !== topics.length) {
-      throw new BadRequest(
-        "One or more selected topics were not found or are not published.",
-      );
-    }
-
-    // Verify all topics belong to the selected subject
-    const invalidTopics = topicDocs.filter(
-      (t) => t.subject.toString() !== subjectDoc?._id.toString(),
-    );
-    if (invalidTopics.length > 0) {
-      throw new BadRequest(
-        "One or more topics do not belong to the selected subject.",
-      );
-    }
-  }
-
-  // 1.4 Question Assignment / Sampling
-  let finalQuestionMappings: Types.ObjectId[] = [];
-
-  if (generationMode === GENERATION_MODE.MANUAL) {
-    if (questionMappings.length > 0) {
-      const validMappings = await QuestionMapping.find({
-        _id: { $in: questionMappings },
-      }).select("_id");
-
-      if (validMappings.length !== questionMappings.length) {
-        throw new BadRequest(
-          "One or more provided question mappings do not exist.",
-        );
-      }
-
-      finalQuestionMappings = questionMappings.map(
-        (id) => new Types.ObjectId(id),
-      );
-    }
-  } else if (generationMode === GENERATION_MODE.RANDOM) {
-    // Build query criteria based on hierarchy
-    const matchFilter: Record<string, unknown> = {};
-
-    if (category) {
-      matchFilter.category = new Types.ObjectId(category);
-    }
-    if (track) {
-      matchFilter.track = new Types.ObjectId(track);
-    }
-    if (subject) {
-      matchFilter.subject = new Types.ObjectId(subject);
-    }
-    if (topics && topics.length > 0) {
-      matchFilter.topic = {
-        $in: topics.map((id) => new Types.ObjectId(id)),
-      };
-    }
-
-    // Verify question pool size before sampling
-    const availableCount = await QuestionMapping.countDocuments(matchFilter);
-    if (availableCount < totalQuestions) {
-      throw new BadRequest(
-        `Only ${availableCount} questions available for the selected criteria. Cannot generate an exam with ${totalQuestions} questions.`,
-      );
-    }
-
-    // Sample questions
-    const sampledMappings = await QuestionMapping.aggregate([
-      { $match: matchFilter },
-      { $sample: { size: totalQuestions } },
-      { $project: { _id: 1 } },
-    ]);
-
-    finalQuestionMappings = sampledMappings.map((item) => item._id);
-  }
-
+  // 4. Generate Unique Slug
+  const uniqueSlug = await generateUniqueExamSlug(title); 
+  
   // 1.5 Sanitize Practice Exam Scheduling Fields
   const isPractice = examType === EXAM_TYPE.MODEL_TEST;
   const sanitizedStartTime = isPractice ? null : startTime;
   const sanitizedEndTime = isPractice ? null : endTime;
 
   // 1.6 Create Document using Discriminator Models
-  const basePayload = {
+  const newExam = await CategoryExam.create({
     title,
     slug: uniqueSlug,
     description: description || null,
+    category: existingCategory?._id,
     generationMode,
     durationMins,
     totalQuestions,
@@ -227,33 +218,12 @@ const createExam = async (user: IUserDoc, payload: TCreateExamPayloadType) => {
     examType,
     startTime: sanitizedStartTime,
     endTime: sanitizedEndTime,
-    status,
+    status: EXAM_STATUS.DRAFT,
     author: user._id,
-  };
+  });
 
-  let newExam;
-  if (examLevel === EXAM_LEVEL.CATEGORY) {
-    newExam = await CategoryExam.create({
-      ...basePayload,
-      category: categoryDoc!._id,
-      track: trackDoc?._id || null,
-    });
-  } else if (examLevel === EXAM_LEVEL.SUBJECT) {
-    newExam = await SubjectExam.create({
-      ...basePayload,
-      category: categoryDoc?._id || null,
-      subject: subjectDoc!._id,
-    });
-  } else if (examLevel === EXAM_LEVEL.TOPIC) {
-    newExam = await TopicExam.create({
-      ...basePayload,
-      category: categoryDoc?._id || null,
-      subject: subjectDoc!._id,
-      topics: topics!.map((t) => new Types.ObjectId(t)),
-    });
-  }
-
-  return newExam;
+  return newExam
+  
 };
 
 // 2. UPDATE EXAM (Hierarchy is strictly immutable)
@@ -486,7 +456,7 @@ const deleteExamById = async (id: string) => {
 };
 
 export const examServices = {
-  createExam,
+  createExam: createCategoryExam,
   updateExam,
   getAllExam,
   getExamById,
