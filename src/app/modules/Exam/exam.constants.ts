@@ -2,6 +2,8 @@ export const examSearchableFields = ["title", "slug"] as const;
 export const examSortableFields = [
   "createdAt",
   "updatedAt",
+  "publishedAt",
+  "archivedAt",
   "totalMarks",
   "durationMins",
 ] as const;
@@ -9,6 +11,7 @@ export const examSortableFields = [
 // 1. Exam Level
 export const EXAM_LEVEL = {
   CATEGORY: "category",
+  TRACK: "track",
   SUBJECT: "subject",
   TOPIC: "topic",
 } as const;

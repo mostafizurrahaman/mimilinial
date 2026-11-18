@@ -46,6 +46,8 @@ export interface IExam {
 
   // 8. Status & Audit
   status: TExamStatusType;
+  publishedAt?: Date | null;
+  archivedAt?: Date | null;
   author: Types.ObjectId;
   editor?: Types.ObjectId | null;
 }
@@ -57,6 +59,12 @@ export interface ICategoryExamDoc extends IExamDoc {
   examLevel: "category";
   category: Types.ObjectId;
   track?: Types.ObjectId | null;
+}
+
+export interface ITrackExamDoc extends IExamDoc {
+  examLevel: "track";
+  category: Types.ObjectId;
+  track: Types.ObjectId;
 }
 
 export interface ISubjectExamDoc extends IExamDoc {

@@ -2,6 +2,7 @@ import { Schema, model } from "mongoose";
 import type {
   IExamDoc,
   ICategoryExamDoc,
+  ITrackExamDoc,
   ISubjectExamDoc,
   ITopicExamDoc,
 } from "./exam.interfaces";
@@ -120,6 +121,14 @@ const examBaseSchema = new Schema<IExamDoc>(
       default: EXAM_STATUS.DRAFT,
       index: true,
     },
+    publishedAt: {
+      type: Date,
+      default: null,
+    },
+    archivedAt: {
+      type: Date,
+      default: null,
+    },
     author: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -159,7 +168,26 @@ export const CategoryExam = Exam.discriminator<ICategoryExamDoc>(
   }),
 );
 
-// 3. Subject Exam Discriminator (Single Subject Exam, Category is Optional for universal tests)
+// 3. Track Exam Discriminator (Model Test for a Track within a Category)
+export const TrackExam = Exam.discriminator<ITrackExamDoc>(
+  "track",
+  new Schema({
+    category: {
+      type: Schema.Types.ObjectId,
+      ref: "Category",
+      required: true,
+      index: true,
+    },
+    track: {
+      type: Schema.Types.ObjectId,
+      ref: "Track",
+      required: true,
+      index: true,
+    },
+  }),
+);
+
+// 4. Subject Exam Discriminator (Single Subject Exam, Category is Optional for universal tests)
 export const SubjectExam = Exam.discriminator<ISubjectExamDoc>(
   "subject",
   new Schema({
@@ -172,7 +200,7 @@ export const SubjectExam = Exam.discriminator<ISubjectExamDoc>(
   }),
 );
 
-// 4. Topic Exam Discriminator (Single Subject + Multiple Topics, Category is Optional for universal tests)
+// 5. Topic Exam Discriminator (Single Subject + Multiple Topics, Category is Optional for universal tests)
 export const TopicExam = Exam.discriminator<ITopicExamDoc>(
   "topic",
   new Schema({

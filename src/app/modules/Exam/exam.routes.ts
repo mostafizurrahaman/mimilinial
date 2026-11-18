@@ -13,12 +13,44 @@ const router: Router = express.Router();
  * -------------------------------------------------------------------------
  */
 
-// 1. CREATE EXAM
+// 1. CREATE EXAM ROUTES (BY LEVEL)
+// 1.1 Category Level Exam (also accessible at root POST /)
 router.post(
   "/",
   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
-  validateRequest(examValidations.createExamSchema),
-  examControllers.createExam,
+  validateRequest(examValidations.createCategoryLevelExamSchema),
+  examControllers.createCategoryExam,
+);
+
+router.post(
+  "/category",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(examValidations.createCategoryLevelExamSchema),
+  examControllers.createCategoryExam,
+);
+
+// 1.2 Track Level Exam
+router.post(
+  "/track",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(examValidations.createTrackLevelExamSchema),
+  examControllers.createTrackExam,
+);
+
+// 1.3 Subject Level Exam
+router.post(
+  "/subject",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(examValidations.createSubjectLevelExamSchema),
+  examControllers.createSubjectExam,
+);
+
+// 1.4 Topic Level Exam
+router.post(
+  "/topic",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(examValidations.createTopicLevelExamSchema),
+  examControllers.createTopicExam,
 );
 
 // 2. UPDATE EXAM
@@ -49,6 +81,30 @@ router.delete(
   auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
   validateRequest(examValidations.deleteExamByIdSchema),
   examControllers.deleteExamById,
+);
+
+// 6. MARK AS PUBLISHED
+router.patch(
+  "/:id/published",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(examValidations.markExamAsPublishedSchema),
+  examControllers.markAsPublished,
+);
+
+// 7. MARK AS ARCHIVED
+router.patch(
+  "/:id/archived",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(examValidations.markExamAsArchivedSchema),
+  examControllers.markAsArchived,
+);
+
+// 8. MARK AS DRAFT (UNPUBLISH)
+router.patch(
+  "/:id/draft",
+  auth(UserRoles.ADMIN, UserRoles.SUPER_ADMIN),
+  validateRequest(examValidations.markExamAsDraftSchema),
+  examControllers.markAsDraft,
 );
 
 export const examRoutes = router;
