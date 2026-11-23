@@ -10,6 +10,7 @@ import {
   optionalDate,
   requiredMongooseId,
   requiredStrBoolean,
+  multipleMongooseId,
 } from "../../utils";
 import {
   examAttemptSortableFields,
@@ -40,13 +41,10 @@ const startSelfPracticeExamSchema = z.object({
     .object({
       category: requiredMongooseId("Category ID").optional(),
       subject: requiredMongooseId("Subject ID").optional(),
-      topics: z
-        .array(requiredMongooseId("Topic ID"))
-        .optional()
-        .default([]),
+      topics: multipleMongooseId("Category IDs").optional().default([]),
       totalQuestions: requiredNumber("Total questions")
         .min(1, "At least 1 question is required")
-        .max(200, "Maximum 200 questions allowed"),
+        .max(100, "Maximum 200 questions allowed"),
       durationMins: requiredNumber("Duration minutes")
         .min(1, "Duration must be at least 1 minute")
         .max(180, "Duration cannot exceed 180 minutes"),

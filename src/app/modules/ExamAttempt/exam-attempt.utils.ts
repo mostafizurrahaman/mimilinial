@@ -1,5 +1,9 @@
 import { Types } from "mongoose";
-import type { TAttemptItem, IMatchingPairAnswer } from "./exam-attempt.interfaces";
+import type {
+  TAttemptItem,
+  IMatchingPairAnswer,
+} from "./exam-attempt.interfaces";
+import type { IQuestionOption, TQuestionType } from "../Questions";
 
 export interface IEvaluationResult {
   isAnswered: boolean;
@@ -79,6 +83,7 @@ export class ExamAttemptUtils {
     isOptionShuffled: boolean = false,
   ): Record<string, any> {
     const plain = version.toObject ? version.toObject() : { ...version };
+
     const sanitized: Record<string, any> = {
       _id: plain._id,
       question: plain.question,
@@ -125,7 +130,7 @@ export class ExamAttemptUtils {
    * Accurately grades all 6 question types.
    */
   static evaluateAnswer(
-    questionType: string,
+    questionType: TQuestionType,
     questionVersion: any,
     userAnswer: any,
   ): IEvaluationResult {
@@ -146,14 +151,11 @@ export class ExamAttemptUtils {
         return { isAnswered: true, isCorrect };
       }
 
-      case "multi_mcq":
-      case "multiple_mcq": {
+      case "multi_mcq": {
         if (!Array.isArray(userAnswer) || userAnswer.length === 0) {
           return { isAnswered: false, isCorrect: false };
         }
-        const userSet = new Set(
-          userAnswer.map((id) => id?.toString().trim()),
-        );
+        const userSet = new Set(userAnswer.map((id) => id?.toString().trim()));
         const correctSet = new Set(
           questionVersion.options
             ?.filter((opt: any) => opt.isCorrect === true)
@@ -175,8 +177,7 @@ export class ExamAttemptUtils {
         const text = String(userAnswer).trim();
         if (!text) return { isAnswered: false, isCorrect: false };
 
-        const acceptedAnswers: string[] =
-          questionVersion.acceptedAnswers || [];
+        const acceptedAnswers: string[] = questionVersion.acceptedAnswers || [];
         const isCaseSensitive: boolean = Boolean(
           questionVersion.isCaseSensitive,
         );
@@ -287,7 +288,7 @@ export class ExamAttemptUtils {
       }
 
       const evalResult = ExamAttemptUtils.evaluateAnswer(
-        item.questionType,
+        item.questionType as TQuestionType,
         version,
         item.userAnswer,
       );
@@ -318,17 +319,15 @@ export class ExamAttemptUtils {
       Math.round(correctCount * rules.marksPerQuestion * 100) / 100;
     const deductedMarks =
       Math.round(wrongCount * rules.negativeMarks * 100) / 100;
-    const finalScore =
-      Math.round((obtainedMarks - deductedMarks) * 100) / 100;
+    const finalScore = Math.round((obtainedMarks - deductedMarks) * 100) / 100;
 
     const totalPossibleMarks =
       Math.round(totalQuestions * rules.marksPerQuestion * 100) / 100;
 
     const percentage =
       totalPossibleMarks > 0
-        ? Math.round(
-            (Math.max(0, finalScore) / totalPossibleMarks) * 10000,
-          ) / 100
+        ? Math.round((Math.max(0, finalScore) / totalPossibleMarks) * 10000) /
+          100
         : 0;
 
     const isPassed = finalScore >= rules.passMarks;

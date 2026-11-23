@@ -17,11 +17,9 @@ import { Question, QUESTION_STATUS } from "../Questions";
 import {
   ExamAttemptStatus,
   examAttemptSortableFields,
+  type TExamAttemptStatus,
 } from "./exam-attempt.constants";
-import {
-  ExamAttemptUtils,
-  examAttemptUtils,
-} from "./exam-attempt.utils";
+import { ExamAttemptUtils, examAttemptUtils } from "./exam-attempt.utils";
 import type {
   TStartSelfPracticeExamPayloadType,
   TSyncAnswerPayloadType,
@@ -29,6 +27,10 @@ import type {
 } from "./exam-attempt.validations";
 import { formatQuery } from "../../utils";
 import type { IExamAttemptDoc } from "./exam-attempt.interfaces";
+import { Category, categoryStatus } from "../Category";
+import { getArticle } from "@/app/utils/get-article";
+import { Subject, SUBJECT_STATUS } from "../Subject";
+import { Topic, TOPIC_STATUS, type ITopicDoc } from "../Topic";
 
 export interface IClientAuditMeta {
   ipAddress?: string | null;
@@ -43,7 +45,7 @@ export interface IClientAuditMeta {
  */
 const gradeAndFinalizeAttempt = async (
   attempt: IExamAttemptDoc,
-  finalStatus: typeof ExamAttemptStatus[keyof typeof ExamAttemptStatus],
+  finalStatus: TExamAttemptStatus,
   timeTakenSeconds?: number,
 ) => {
   const now = new Date();
@@ -60,7 +62,9 @@ const gradeAndFinalizeAttempt = async (
 
     const rawTimeTaken = Math.max(
       0,
-      Math.round((now.getTime() - new Date(attempt.startDate).getTime()) / 1000),
+      Math.round(
+        (now.getTime() - new Date(attempt.startDate).getTime()) / 1000,
+      ),
     );
     timeTakenSeconds = Math.min(rawTimeTaken, maxDurationSeconds);
   }
@@ -201,6 +205,12 @@ const startOfficialExam = async (
     } else {
       // Auto-expire and grade old zombie session
       await gradeAndFinalizeAttempt(activeAttempt, ExamAttemptStatus.TIME_OUT);
+
+      if (exam.examType === EXAM_TYPE.LIVE) {
+        throw new ConflictError(
+          "Your exam time has expired and your attempt has been finalized. Retakes are not allowed during the live competition.",
+        );
+      }
     }
   }
 
@@ -331,10 +341,81 @@ const startSelfPracticeExam = async (
   const { category, subject, topics, totalQuestions, durationMins } = payload;
 
   const matchFilter: Record<string, any> = {};
-  if (category) matchFilter.category = new Types.ObjectId(category);
-  if (subject) matchFilter.subject = new Types.ObjectId(subject);
-  if (topics && topics.length > 0) {
-    matchFilter.topic = { $in: topics.map((t) => new Types.ObjectId(t)) };
+
+  // Category Validation:
+  let existingCategory = null;
+  if (category) {
+    existingCategory = await Category.findById(category);
+    if (!existingCategory) {
+      throw new NotFoundError("Category not found.");
+    }
+
+    if (existingCategory.status !== categoryStatus.PUBLISHED) {
+      throw new BadRequest(
+        `You can not practice under ${getArticle(existingCategory.status)} category.`,
+      );
+    }
+
+    matchFilter.category = existingCategory._id;
+  }
+
+  // Subject Validation:
+  let existingSubject = null;
+  if (subject) {
+    existingSubject = await Subject.findById(subject);
+    if (!existingSubject) {
+      throw new NotFoundError("Subject not found.");
+    }
+
+    if (existingSubject.status !== SUBJECT_STATUS.PUBLISHED) {
+      throw new BadRequest(
+        `You can not practice under ${getArticle(existingSubject.status)} subject.`,
+      );
+    }
+
+    matchFilter.subject = existingSubject._id;
+  }
+
+  // Topics Validation:
+  let existingTopics: ITopicDoc[] = [];
+  if (topics && Array.isArray(topics) && topics.length > 0) {
+    const uniqueTopicIds = Array.from(new Set(topics.map((t) => t.toString())));
+
+    const targetedTopics = await Topic.find({
+      _id: { $in: uniqueTopicIds },
+    });
+
+    if (targetedTopics.length === 0) {
+      throw new NotFoundError("No topics found.");
+    }
+
+    if (targetedTopics.length !== uniqueTopicIds.length) {
+      throw new BadRequest("Some of the selected topics do not exist.");
+    }
+
+    const unpublishedTopic = targetedTopics.find(
+      (t) => t.status !== TOPIC_STATUS.PUBLISHED,
+    );
+
+    if (unpublishedTopic) {
+      throw new BadRequest(
+        `Topic "${unpublishedTopic.nameEn}" is not published yet.`,
+      );
+    }
+
+    // Check if all topics belong to provided subject:
+    if (existingSubject) {
+      const isAllBelongToSubject = targetedTopics.every(
+        (t) => t.subject.toString() === existingSubject._id.toString(),
+      );
+
+      if (!isAllBelongToSubject) {
+        throw new BadRequest("All topics must belong to the selected subject.");
+      }
+    }
+
+    existingTopics = targetedTopics;
+    matchFilter.topic = { $in: existingTopics.map((t) => t._id) };
   }
 
   // Aggregate random questions
@@ -399,7 +480,10 @@ const startSelfPracticeExam = async (
   }
 
   const startedAt = new Date();
-  const expiresAt = ExamAttemptUtils.calculateExpiresAt(startedAt, durationMins);
+  const expiresAt = ExamAttemptUtils.calculateExpiresAt(
+    startedAt,
+    durationMins,
+  );
 
   const questionsPayload = sampledMappings.map((s) => {
     const version = versionMap.get(s._id.toString());
@@ -607,16 +691,26 @@ const syncAnswer = async (
 
 // 5. LOG TAB SWITCH
 const logTabSwitch = async (userId: string, attemptId: string) => {
-  const attempt = await ExamAttempt.findOneAndUpdate(
-    { _id: attemptId, user: new Types.ObjectId(userId) },
-    { $inc: { tabSwitchedCount: 1 } },
-    { new: true },
-  );
+  const attempt = await ExamAttempt.findOne({
+    _id: attemptId,
+    user: new Types.ObjectId(userId),
+  });
 
   if (!attempt) {
     throw new NotFoundError("Exam attempt not found.");
   }
+  if (attempt.status !== ExamAttemptStatus.IN_PROGRESS) {
+    throw new BadRequest(
+      `Cannot log tab switch. Exam is already ${attempt.status}.`,
+    );
+  }
 
+  if (ExamAttemptUtils.isAttemptExpired(attempt.expiresAt)) {
+    throw new BadRequest("Exam time has expired.");
+  }
+
+  attempt.tabSwitchedCount = (attempt.tabSwitchedCount || 0) + 1;
+  await attempt.save();
   return { tabSwitchedCount: attempt.tabSwitchedCount };
 };
 
@@ -708,7 +802,8 @@ const reviewAnswerScript = async (
 
   const questionIds = attempt.questions.map((q) => q.questionId);
 
-  const [versions, questionsWithPassages] = await Promise.all([
+  const [result, versions, questionsWithPassages] = await Promise.all([
+    ExamResult.findOne({ attemptId: attempt._id }),
     QuestionVersion.find({ _id: { $in: versionIds } }),
     Question.find({ _id: { $in: questionIds } }).populate("passageId"),
   ]);
@@ -737,7 +832,7 @@ const reviewAnswerScript = async (
     const v = q.versionId ? versionsMap.get(q.versionId.toString()) : null;
     const passage = passageMap.get(q.questionId.toString()) || null;
     const evalResult = v
-      ? ExamAttemptUtils.evaluateAnswer(q.questionType, v, q.userAnswer)
+      ? ExamAttemptUtils.evaluateAnswer(q.questionType as any, v, q.userAnswer)
       : { isAnswered: false, isCorrect: false };
 
     return {
@@ -761,6 +856,7 @@ const reviewAnswerScript = async (
     submittedAt: attempt.submittedAt,
     totalTimeTakenSeconds: attempt.totalTimeTakenSeconds,
     tabSwitchedCount: attempt.tabSwitchedCount,
+    result: result || null,
     questions: detailedQuestions,
   };
 };
@@ -770,16 +866,8 @@ const getMyAttempts = async (
   userId: string,
   query: TGetAllExamAttemptQueryParamsType,
 ) => {
-  const {
-    page,
-    limit,
-    skip,
-    searchTerm,
-    sortOrder,
-    sortBy,
-    fromDate,
-    toDate,
-  } = formatQuery(query, examAttemptSortableFields);
+  const { page, limit, skip, searchTerm, sortOrder, sortBy, fromDate, toDate } =
+    formatQuery(query, examAttemptSortableFields);
 
   const filter: Record<string, any> = {
     user: new Types.ObjectId(userId),
@@ -817,16 +905,8 @@ const getMyAttempts = async (
 
 // 9. GET ALL EXAM ATTEMPTS (Admin)
 const getAllExamAttempt = async (query: TGetAllExamAttemptQueryParamsType) => {
-  const {
-    page,
-    limit,
-    skip,
-    searchTerm,
-    sortOrder,
-    sortBy,
-    fromDate,
-    toDate,
-  } = formatQuery(query, examAttemptSortableFields);
+  const { page, limit, skip, searchTerm, sortOrder, sortBy, fromDate, toDate } =
+    formatQuery(query, examAttemptSortableFields);
 
   const filter: Record<string, any> = {};
 
