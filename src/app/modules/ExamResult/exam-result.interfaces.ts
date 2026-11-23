@@ -32,6 +32,10 @@ export interface IExamResult {
 
   subjectBreakdown: ISubjectScoreSummary[];
   totalTimeTakenSeconds: number;
+  totalTimeTakenMinutes: number;
+  displayTotalTimeTaken: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface IExamResultDoc extends Document, IExamResult {}

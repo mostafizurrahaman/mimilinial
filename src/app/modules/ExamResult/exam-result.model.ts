@@ -3,6 +3,7 @@ import type {
   IExamResultDoc,
   ISubjectScoreSummary,
 } from "./exam-result.interfaces";
+import { formatDisplayTime } from "./exam-result.utils";
 
 const subjectScoreSchema = new Schema<ISubjectScoreSummary>(
   {
@@ -135,12 +136,28 @@ const examResultSchema = new Schema<IExamResultDoc>(
       required: true,
       default: 0,
     },
+    totalTimeTakenMinutes: {
+      type: Number,
+      default: 0,
+    },
+    displayTotalTimeTaken: {
+      type: String,
+      default: "0s",
+    },
   },
   {
     timestamps: true,
     versionKey: false,
   },
 );
+
+examResultSchema.pre("save", function () {
+  if (this.totalTimeTakenSeconds !== undefined) {
+    this.totalTimeTakenMinutes =
+      Math.round((this.totalTimeTakenSeconds / 60) * 100) / 100;
+    this.displayTotalTimeTaken = formatDisplayTime(this.totalTimeTakenSeconds);
+  }
+});
 
 // Compound Index for Leaderboard (Blazing fast sorted queries)
 examResultSchema.index({

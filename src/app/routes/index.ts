@@ -13,6 +13,7 @@ import { pastExamRoutes } from "../modules/PastExam";
 import { questionMappingRoutes } from "../modules/QuestionMapping";
 import { examRoutes } from "../modules/Exam";
 import { examAttemptRoutes } from "../modules/ExamAttempt";
+import { examResultRoutes } from "../modules/ExamResult";
 
 const router: Router = express();
 
@@ -72,6 +73,10 @@ const routes = [
   {
     path: "/exam-attempts",
     route: examAttemptRoutes,
+  },
+  {
+    path: "/exam-results",
+    route: examResultRoutes,
   },
 ];
 

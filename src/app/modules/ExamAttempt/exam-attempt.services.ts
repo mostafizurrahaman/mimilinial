@@ -8,7 +8,7 @@ import {
   NotFoundError,
 } from "../../errors";
 import { ExamAttempt } from "./exam-attempt.model";
-import { ExamResult } from "../ExamResult";
+import { ExamResult, formatDisplayTime } from "../ExamResult";
 import { Exam } from "../Exam/exam.model";
 import { EXAM_STATUS, EXAM_TYPE } from "../Exam/exam.constants";
 import { QuestionMapping } from "../QuestionMapping";
@@ -128,6 +128,10 @@ const gradeAndFinalizeAttempt = async (
     },
   );
 
+  const timeTakenMinutes =
+    Math.round((timeTakenSeconds / 60) * 100) / 100;
+  const displayTotalTimeTaken = formatDisplayTime(timeTakenSeconds);
+
   // Create immutable ExamResult
   const examResult = await ExamResult.create({
     attemptId: attempt._id,
@@ -136,6 +140,8 @@ const gradeAndFinalizeAttempt = async (
     isSelfPractice: attempt.isSelfPractice,
     ...scorecard,
     totalTimeTakenSeconds: timeTakenSeconds,
+    totalTimeTakenMinutes: timeTakenMinutes,
+    displayTotalTimeTaken,
   });
 
   return examResult;
