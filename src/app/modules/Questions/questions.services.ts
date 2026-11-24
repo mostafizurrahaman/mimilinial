@@ -152,7 +152,7 @@ const createSingleMcqQuestion = async (
   const code = await questionUtils.generateUniqueQuestionCode("SMCQ");
   const slug = questionUtils.generateSafeQuestionSlug(stem, code);
   const language = questionUtils.detectLanguage(stem);
-  const planHtml = questionUtils.stripHtml(stem);
+  const plainStem = questionUtils.stripHtml(stem);
 
   // Check if the slug already in use:
   const duplicateSlug = await Question.exists({ slug });
@@ -214,7 +214,7 @@ const createSingleMcqQuestion = async (
       versionNumber: 1,
       isCurrent: true,
       stem,
-      planStem: planHtml,
+      plainStem: plainStem,
       options: options as IQuestionOption[],
       contentHash: hashedContent,
       language,
@@ -305,7 +305,7 @@ const createMultiMcqQuestion = async (
   const code = await questionUtils.generateUniqueQuestionCode("MMCQ");
   const slug = questionUtils.generateSafeQuestionSlug(stem, code);
   const language = questionUtils.detectLanguage(stem);
-  const planHtml = questionUtils.stripHtml(stem);
+  const plainStem = questionUtils.stripHtml(stem);
 
   // Check if the slug already in use:
   const duplicateSlug = await Question.exists({ slug });
@@ -367,7 +367,7 @@ const createMultiMcqQuestion = async (
       versionNumber: 1,
       isCurrent: true,
       stem,
-      planStem: planHtml,
+      plainStem: plainStem,
       options: options as IQuestionOption[],
       contentHash: hashedContent,
       language,
@@ -459,7 +459,7 @@ const createTrueFalseQuestion = async (
   const code = await questionUtils.generateUniqueQuestionCode("TF");
   const slug = questionUtils.generateSafeQuestionSlug(stem, code);
   const language = questionUtils.detectLanguage(stem);
-  const planHtml = questionUtils.stripHtml(stem);
+  const plainStem = questionUtils.stripHtml(stem);
 
   // Check duplicate slug:
   const duplicateSlug = await Question.exists({ slug });
@@ -520,7 +520,7 @@ const createTrueFalseQuestion = async (
       versionNumber: 1,
       isCurrent: true,
       stem,
-      planStem: planHtml,
+      plainStem: plainStem,
       options: options as IQuestionOption[],
       contentHash: hashedContent,
       language,
@@ -621,7 +621,7 @@ const createFillBlankQuestion = async (
   const code = await questionUtils.generateUniqueQuestionCode("FITB");
   const slug = questionUtils.generateSafeQuestionSlug(stem, code);
   const language = questionUtils.detectLanguage(stem);
-  const planHtml = questionUtils.stripHtml(stem);
+  const plainStem = questionUtils.stripHtml(stem);
 
   // Check duplicate slug:
   const duplicateSlug = await Question.exists({ slug });
@@ -678,7 +678,7 @@ const createFillBlankQuestion = async (
       versionNumber: 1,
       isCurrent: true,
       stem,
-      planStem: planHtml,
+      plainStem: plainStem,
       acceptedAnswers,
       isCaseSensitive: !!isCaseSensitive,
       contentHash: hashedContent,
@@ -773,7 +773,7 @@ const createMatchingQuestion = async (
   const code = await questionUtils.generateUniqueQuestionCode("MAT");
   const slug = questionUtils.generateSafeQuestionSlug(stem, code);
   const language = questionUtils.detectLanguage(stem);
-  const planHtml = questionUtils.stripHtml(stem);
+  const plainStem = questionUtils.stripHtml(stem);
 
   // Check duplicate slug:
   const duplicateSlug = await Question.exists({ slug });
@@ -834,7 +834,7 @@ const createMatchingQuestion = async (
       versionNumber: 1,
       isCurrent: true,
       stem,
-      planStem: planHtml,
+      plainStem: plainStem,
       pairs: pairs as IMatchingPair[],
       contentHash: hashedContent,
       language,
@@ -928,7 +928,7 @@ const createOrderingQuestion = async (
   const code = await questionUtils.generateUniqueQuestionCode("ORD");
   const slug = questionUtils.generateSafeQuestionSlug(stem, code);
   const language = questionUtils.detectLanguage(stem);
-  const planHtml = questionUtils.stripHtml(stem);
+  const plainStem = questionUtils.stripHtml(stem);
 
   // Check duplicate slug:
   const duplicateSlug = await Question.exists({ slug });
@@ -988,7 +988,7 @@ const createOrderingQuestion = async (
       versionNumber: 1,
       isCurrent: true,
       stem,
-      planStem: planHtml,
+      plainStem: plainStem,
       orderingItems: orderingItems as IOrderingItem[],
       contentHash: hashedContent,
       language,
@@ -1143,7 +1143,7 @@ const updateSingleMcqQuestion = async (
   }
 
   const language = questionUtils.detectLanguage(newStem);
-  const planHtml = questionUtils.stripHtml(newStem);
+  const plainStem = questionUtils.stripHtml(newStem);
 
   let newSlug = question.slug;
   if (stem && stem !== currentVersion.stem) {
@@ -1211,7 +1211,7 @@ const updateSingleMcqQuestion = async (
           versionNumber: newVersionNumber,
           isCurrent: true,
           stem: newStem,
-          planStem: planHtml,
+          plainStem: plainStem,
           options: newOptions,
           contentHash: hashedContent,
           language,
@@ -1232,7 +1232,7 @@ const updateSingleMcqQuestion = async (
     } else {
       if (isVersionChanged) {
         currentVersion.stem = newStem;
-        currentVersion.plainStem = planHtml;
+        currentVersion.plainStem = plainStem;
         currentVersion.options = newOptions;
         currentVersion.contentHash = hashedContent;
         currentVersion.language = language;
@@ -1383,7 +1383,7 @@ const updateMultiMcqQuestion = async (
   }
 
   const language = questionUtils.detectLanguage(newStem);
-  const planHtml = questionUtils.stripHtml(newStem);
+  const plainStem = questionUtils.stripHtml(newStem);
 
   let newSlug = question.slug;
   if (stem && stem !== currentVersion.stem) {
@@ -1451,7 +1451,7 @@ const updateMultiMcqQuestion = async (
           versionNumber: newVersionNumber,
           isCurrent: true,
           stem: newStem,
-          planStem: planHtml,
+          plainStem: plainStem,
           options: newOptions,
           contentHash: hashedContent,
           language,
@@ -1473,7 +1473,7 @@ const updateMultiMcqQuestion = async (
     } else {
       if (isVersionChanged) {
         currentVersion.stem = newStem;
-        currentVersion.plainStem = planHtml;
+        currentVersion.plainStem = plainStem;
         currentVersion.options = newOptions;
         currentVersion.contentHash = hashedContent;
         currentVersion.language = language;
@@ -1624,7 +1624,7 @@ const updateTrueFalseQuestion = async (
   }
 
   const language = questionUtils.detectLanguage(newStem);
-  const planHtml = questionUtils.stripHtml(newStem);
+  const plainStem = questionUtils.stripHtml(newStem);
 
   let newSlug = question.slug;
   if (stem && stem !== currentVersion.stem) {
@@ -1692,7 +1692,7 @@ const updateTrueFalseQuestion = async (
           versionNumber: newVersionNumber,
           isCurrent: true,
           stem: newStem,
-          planStem: planHtml,
+          plainStem: plainStem,
           options: newOptions,
           contentHash: hashedContent,
           language,
@@ -1716,7 +1716,7 @@ const updateTrueFalseQuestion = async (
     } else {
       if (isVersionChanged) {
         currentVersion.stem = newStem;
-        currentVersion.plainStem = planHtml;
+        currentVersion.plainStem = plainStem;
         currentVersion.options = newOptions;
         currentVersion.contentHash = hashedContent;
         currentVersion.language = language;
@@ -1881,7 +1881,7 @@ const updateFillBlankQuestion = async (
   }
 
   const language = questionUtils.detectLanguage(newStem);
-  const planHtml = questionUtils.stripHtml(newStem);
+  const plainStem = questionUtils.stripHtml(newStem);
 
   let newSlug = question.slug;
   if (stem && stem !== currentVersion.stem) {
@@ -1945,7 +1945,7 @@ const updateFillBlankQuestion = async (
           versionNumber: newVersionNumber,
           isCurrent: true,
           stem: newStem,
-          planStem: planHtml,
+          plainStem: plainStem,
           acceptedAnswers: newAcceptedAnswers,
           isCaseSensitive: newIsCaseSensitive,
           contentHash: hashedContent,
@@ -1968,7 +1968,7 @@ const updateFillBlankQuestion = async (
     } else {
       if (isVersionChanged) {
         currentVersion.stem = newStem;
-        currentVersion.plainStem = planHtml;
+        currentVersion.plainStem = plainStem;
         currentVersion.acceptedAnswers = newAcceptedAnswers;
         currentVersion.isCaseSensitive = newIsCaseSensitive;
         currentVersion.contentHash = hashedContent;
@@ -2119,7 +2119,7 @@ const updateMatchingQuestion = async (
   }
 
   const language = questionUtils.detectLanguage(newStem);
-  const planHtml = questionUtils.stripHtml(newStem);
+  const plainStem = questionUtils.stripHtml(newStem);
 
   let newSlug = question.slug;
   if (stem && stem !== currentVersion.stem) {
@@ -2187,7 +2187,7 @@ const updateMatchingQuestion = async (
           versionNumber: newVersionNumber,
           isCurrent: true,
           stem: newStem,
-          planStem: planHtml,
+          plainStem: plainStem,
           pairs: newPairs,
           contentHash: hashedContent,
           language,
@@ -2209,7 +2209,7 @@ const updateMatchingQuestion = async (
     } else {
       if (isVersionChanged) {
         currentVersion.stem = newStem;
-        currentVersion.plainStem = planHtml;
+        currentVersion.plainStem = plainStem;
         currentVersion.pairs = newPairs;
         currentVersion.contentHash = hashedContent;
         currentVersion.language = language;
@@ -2361,7 +2361,7 @@ const updateOrderingQuestion = async (
   }
 
   const language = questionUtils.detectLanguage(newStem);
-  const planHtml = questionUtils.stripHtml(newStem);
+  const plainStem = questionUtils.stripHtml(newStem);
 
   let newSlug = question.slug;
   if (stem && stem !== currentVersion.stem) {
@@ -2428,7 +2428,7 @@ const updateOrderingQuestion = async (
           versionNumber: newVersionNumber,
           isCurrent: true,
           stem: newStem,
-          planStem: planHtml,
+          plainStem: plainStem,
           orderingItems: newOrderingItems,
           contentHash: hashedContent,
           language,
@@ -2450,7 +2450,7 @@ const updateOrderingQuestion = async (
     } else {
       if (isVersionChanged) {
         currentVersion.stem = newStem;
-        currentVersion.plainStem = planHtml;
+        currentVersion.plainStem = plainStem;
         currentVersion.orderingItems = newOrderingItems;
         currentVersion.contentHash = hashedContent;
         currentVersion.language = language;
