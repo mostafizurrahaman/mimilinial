@@ -9,6 +9,7 @@ import {
 } from "../../errors";
 import { ExamAttempt } from "./exam-attempt.model";
 import { ExamResult, formatDisplayTime } from "../ExamResult";
+import { userMasteryServices } from "../UserMastery";
 import { Exam } from "../Exam/exam.model";
 import { EXAM_STATUS, EXAM_TYPE } from "../Exam/exam.constants";
 import { QuestionMapping } from "../QuestionMapping";
@@ -143,6 +144,11 @@ const gradeAndFinalizeAttempt = async (
     totalTimeTakenMinutes: timeTakenMinutes,
     displayTotalTimeTaken,
   });
+
+  // Background sync: update user mastery statistics
+  userMasteryServices
+    .updateMasteryFromExamAttempt(attempt, versionsMap, mappingsMap)
+    .catch((err) => console.error("Error updating user mastery:", err));
 
   return examResult;
 };
